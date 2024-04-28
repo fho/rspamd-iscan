@@ -10,6 +10,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -18,6 +19,9 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	flag "github.com/spf13/pflag"
 )
+
+var version string = "version-undefined"
+var commit string = "commit-undefined"
 
 type Config struct {
 	RspamdURL      string
@@ -52,7 +56,13 @@ func LoadConfig(path string) (*Config, error) {
 func main() {
 	cfgPath := flag.String("cfg-file", "rspamd-iscan.toml", "Path to the rspamd-iscan config file")
 	stateFilePath := flag.String("state-file", ".rspamd-iscan.state", "Path to a file that stores the scan state")
+	printVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+
+	if *printVersion {
+		fmt.Printf("rspamd-iscan %s (%s)\n", version, commit)
+		os.Exit(0)
+	}
 
 	// TODO: implement signal handler for clean shutdown
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{

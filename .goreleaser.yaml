@@ -1,0 +1,47 @@
+---
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 1
+
+release:
+  draft: true
+builds:
+  - env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - "-X main.commit={{ .Commit }} -X main.version={{ .Version }}"
+    goarch:
+      - amd64
+    goos:
+      - linux
+    mod_timestamp: '{{ .CommitTimestamp }}'
+archives:
+  - format: tar.xz
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
+  algorithm: sha256
+signs:
+  - artifacts: checksum
+    args:
+      - "--local-user"
+      - "0x82BD70683B9A136F"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+snapshot:
+  name_template: "{{ incpatch .Version }}-dev"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

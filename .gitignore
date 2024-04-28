@@ -1,2 +1,4 @@
 .rspamd-iscan.state
 rspamd-iscan
+
+dist/
