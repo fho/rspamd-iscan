@@ -17,6 +17,10 @@ import (
 
 const defChanBufSiz = 32
 
+type eventNewMessages struct {
+	NewMsgCount uint32
+}
+
 type Client struct {
 	clt    *imapclient.Client
 	logger *slog.Logger
@@ -30,7 +34,7 @@ type Client struct {
 
 	hamLearnCheckInterval time.Duration
 
-	eventCh chan any
+	eventCh chan eventNewMessages
 
 	rspamc *rspamc.Client
 }
@@ -50,7 +54,7 @@ func NewClient(
 		scanMailbox:           scanMailbox,
 		spamMailbox:           spamMailboxName,
 		hamMailbox:            hamMailbox,
-		eventCh:               make(chan any, defChanBufSiz),
+		eventCh:               make(chan eventNewMessages, defChanBufSiz),
 		rspamc:                rspamc,
 		statefilePath:         statefilePath,
 		spamTreshold:          spamTreshold,
@@ -83,9 +87,8 @@ func (c *Client) mailboxUpdateHandler(d *imapclient.UnilateralDataMailbox) {
 		return
 	}
 
-	numMsg := fmt.Sprint(*d.NumMessages)
-	c.logger.Debug("received mailbox update", "num_messages", numMsg)
-	c.eventCh <- d
+	c.logger.Debug("received mailbox update", "num_messages", *d.NumMessages)
+	c.eventCh <- eventNewMessages{NewMsgCount: *d.NumMessages}
 }
 
 func (c *Client) Close() error {
@@ -96,10 +99,18 @@ func (c *Client) Close() error {
 // stop must be called before any other imap commands can be processed,
 // otherwise the client will hang.
 func (c *Client) Monitor(mailbox string) (stop func() error, err error) {
-	c.logger.Debug("starting to monitor mailbox for changes", "mailbox", mailbox)
-	err = c.clt.Subscribe(mailbox).Wait()
+	logger := c.logger.With("mailbox", mailbox)
+
+	logger.Debug("starting to monitor mailbox for changes")
+	d, err := c.clt.Select(mailbox, &imap.SelectOptions{ReadOnly: true}).Wait()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("selecting mailbox %q failed: %w", mailbox, err)
+	}
+
+	if d.NumMessages != 0 {
+		logger.Debug("mailbox has new message, skipping monitoring", "num_messages", d.NumMessages)
+		c.eventCh <- eventNewMessages{NewMsgCount: d.NumMessages}
+		return func() error { return nil }, nil
 	}
 
 	idlecmd, err := c.clt.Idle()
@@ -108,9 +119,9 @@ func (c *Client) Monitor(mailbox string) (stop func() error, err error) {
 	}
 
 	return func() error {
-		c.logger.Debug("canceling idle")
+		logger.Debug("canceling idle")
 		err := errors.Join(idlecmd.Close(), idlecmd.Wait())
-		c.logger.Debug("idle canceled")
+		logger.Debug("idle canceled")
 		return err
 	}, nil
 }
@@ -477,6 +488,7 @@ func (c *Client) Run() error {
 			if err != nil {
 				return WrapRetryableError(err)
 			}
+
 		case evA, ok := <-c.eventCh:
 			if !ok {
 				c.logger.Debug("event channel was closed")
@@ -495,37 +507,29 @@ func (c *Client) Run() error {
 				lastHamLearn = time.Now()
 			}
 
-			switch v := evA.(type) {
-			case *imapclient.UnilateralDataMailbox:
-				// TODO: we might receive multiple events at once,
-				// instead of processing all sequentially, fetch
-				// all and only call ProcessScanBox 1x
-				if v.NumMessages == nil || *v.NumMessages == 0 {
-					c.logger.Info("ignoring MailboxUpdate, no new messages")
-					continue
-				}
+			// TODO: we might receive multiple events at once,
+			// instead of processing all sequentially, fetch
+			// all and only call ProcessScanBox 1x
+			if evA.NewMsgCount == 0 {
+				c.logger.Info("ignoring MailboxUpdate, no new messages")
+				continue
+			}
 
-				seen, err := c.ProcessScanBox(lastSeen.Seen[c.scanMailbox])
-				lastSeen.Seen[c.scanMailbox] = seen
-				// TODO: ProcessScanBox returns early, and returns
-				// lastSeen if there is nothing to do, do not write the
-				// file unnecesarily.
-				if err := c.writeStateFile(lastSeen); err != nil {
-					return fmt.Errorf("writing state file failed: %w", err)
-				}
-				if err != nil {
-					return err
-				}
+			seen, err := c.ProcessScanBox(lastSeen.Seen[c.scanMailbox])
+			lastSeen.Seen[c.scanMailbox] = seen
+			// TODO: ProcessScanBox returns early, and returns
+			// lastSeen if there is nothing to do, do not write the
+			// file unnecesarily.
+			if err := c.writeStateFile(lastSeen); err != nil {
+				return fmt.Errorf("writing state file failed: %w", err)
+			}
+			if err != nil {
+				return err
+			}
 
-				monitorCancelFn, err = c.Monitor(c.scanMailbox)
-				if err != nil {
-					return WrapRetryableError(err)
-				}
-			case error:
-				c.logger.Debug(fmt.Sprintf("received error: %T: %v", v, v))
-				return WrapRetryableError(v)
-			default:
-				c.logger.Warn("received unexpected event", "event", v, "event-type", fmt.Sprintf("%T", v))
+			monitorCancelFn, err = c.Monitor(c.scanMailbox)
+			if err != nil {
+				return WrapRetryableError(err)
 			}
 		}
 	}
