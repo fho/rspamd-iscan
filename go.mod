@@ -1,6 +1,6 @@
 module github.com/fho/rspamd-scan
 
-go 1.21
+go 1.22.4
 
 require (
 	github.com/emersion/go-imap/v2 v2.0.0-beta.3
