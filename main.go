@@ -1,13 +1,5 @@
 package main
 
-/* TODO:
-- add command to create example config
-- Support learning ham
-- Support learning spam
-- Modify E-mail headers after spam, add spam-score etc hdrs from rspamd
-- add --verbose flag, to enable logging debug messages
-*/
-
 import (
 	"errors"
 	"fmt"
@@ -16,6 +8,7 @@ import (
 
 	"github.com/fho/rspamd-scan/internal/imap"
 	"github.com/fho/rspamd-scan/internal/rspamc"
+
 	"github.com/pelletier/go-toml/v2"
 	flag "github.com/spf13/pflag"
 )
