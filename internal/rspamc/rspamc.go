@@ -12,6 +12,7 @@ import (
 type Client struct {
 	checkURL string
 	hamURL   string
+	spamURL  string
 	logger   *slog.Logger
 	password string
 }
@@ -20,6 +21,7 @@ func New(logger *slog.Logger, url, password string) *Client {
 	return &Client{
 		checkURL: url + "/checkv2",
 		hamURL:   url + "/learnham",
+		spamURL:  url + "/learnspam",
 		logger:   logger.WithGroup("rspamc").With("server", url),
 		password: password,
 	}
@@ -34,6 +36,7 @@ func (c *Client) sendRequest(ctx context.Context, url string, msg io.Reader, res
 
 	req.Header.Add("password", c.password)
 
+	// TODO: use custom client with configured timeouts
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil
@@ -68,6 +71,7 @@ func (c *Client) sendRequest(ctx context.Context, url string, msg io.Reader, res
 		if len(buf) != 0 {
 			logger.Warn("expected no response body but got one", "response", string(buf))
 		}
+
 		return nil
 	}
 
@@ -106,6 +110,10 @@ func (c *Client) Ham(ctx context.Context, msg io.Reader) error {
 	// }
 
 	return nil
+}
+
+func (c *Client) Spam(ctx context.Context, msg io.Reader) error {
+	return c.sendRequest(ctx, c.spamURL, msg, nil)
 }
 
 type learnHamReponse struct {
