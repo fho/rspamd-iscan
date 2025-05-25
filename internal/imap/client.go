@@ -84,7 +84,7 @@ func NewClient(cfg *Config) (*Client, error) {
 		return nil, err
 	}
 
-	logger.Debug("connection established", "server", cfg.ServerAddr)
+	logger.Debug("connection established")
 
 	return c, nil
 }
