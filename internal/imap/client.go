@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"time"
@@ -26,14 +27,15 @@ type Client struct {
 	clt    *imapclient.Client
 	logger *slog.Logger
 
-	spamMailbox   string
-	hamMailbox    string
-	scanMailbox   string
-	inboxMailbox  string
-	statefilePath string
-	spamTreshold  float32
+	scanMailbox       string
+	inboxMailbox      string
+	spamMailbox       string
+	hamMailbox        string
+	undetectedMailbox string
+	statefilePath     string
+	spamTreshold      float32
 
-	hamLearnCheckInterval time.Duration
+	learnInterval time.Duration
 
 	eventCh chan eventNewMessages
 
@@ -41,32 +43,36 @@ type Client struct {
 }
 
 type Config struct {
-	ServerAddr      string
-	User            string
-	Passwd          string
-	ScanMailbox     string
-	InboxMailbox    string
-	HamMailbox      string
-	SpamMailboxName string
-	StateFilePath   string
-	SpamTreshold    float32
-	Logger          *slog.Logger
-	Rspamc          *rspamc.Client
+	ServerAddr            string
+	User                  string
+	Passwd                string
+	ScanMailbox           string
+	InboxMailbox          string
+	HamMailbox            string
+	SpamMailboxName       string
+	UndetectedMailboxName string
+	StateFilePath         string
+	SpamTreshold          float32
+	Logger                *slog.Logger
+	Rspamc                *rspamc.Client
 }
+
+type learnFn func(context.Context, io.Reader) error
 
 func NewClient(cfg *Config) (*Client, error) {
 	logger := cfg.Logger.WithGroup("imap").With("server", cfg.ServerAddr)
 	c := &Client{
-		logger:                logger,
-		inboxMailbox:          cfg.InboxMailbox,
-		scanMailbox:           cfg.ScanMailbox,
-		spamMailbox:           cfg.SpamMailboxName,
-		hamMailbox:            cfg.HamMailbox,
-		eventCh:               make(chan eventNewMessages, defChanBufSiz),
-		rspamc:                cfg.Rspamc,
-		statefilePath:         cfg.StateFilePath,
-		spamTreshold:          cfg.SpamTreshold,
-		hamLearnCheckInterval: 30 * time.Minute,
+		logger:            logger,
+		inboxMailbox:      cfg.InboxMailbox,
+		scanMailbox:       cfg.ScanMailbox,
+		spamMailbox:       cfg.SpamMailboxName,
+		hamMailbox:        cfg.HamMailbox,
+		undetectedMailbox: cfg.UndetectedMailboxName,
+		eventCh:           make(chan eventNewMessages, defChanBufSiz),
+		rspamc:            cfg.Rspamc,
+		statefilePath:     cfg.StateFilePath,
+		spamTreshold:      cfg.SpamTreshold,
+		learnInterval:     30 * time.Minute,
 	}
 
 	clt, err := imapclient.DialTLS(cfg.ServerAddr, &imapclient.Options{
@@ -163,8 +169,7 @@ func (c *Client) loadOrCreateState() (*state, error) {
 		logger.Info("state file does not exist, all mails will be scanned")
 		return &state{
 			Seen: map[string]*SeenStatus{
-				c.scanMailbox: {},
-				c.hamMailbox:  {},
+				c.scanMailbox: {}, c.hamMailbox: {},
 			},
 		}, nil
 	}
@@ -193,17 +198,33 @@ func (c *Client) loadOrCreateState() (*state, error) {
 }
 
 func (c *Client) ProcessHam() error {
-	logger := c.logger.With("mailbox.source", c.hamMailbox)
+	if c.hamMailbox == "" {
+		return nil
+	}
+
+	return c.learn(c.hamMailbox, c.inboxMailbox, c.rspamc.Ham)
+}
+
+func (c *Client) ProcessSpam() error {
+	if c.undetectedMailbox == "" {
+		return nil
+	}
+
+	return c.learn(c.undetectedMailbox, c.spamMailbox, c.rspamc.Spam)
+}
+
+func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
+	logger := c.logger.With("mailbox.source", srcMailbox)
 
 	logger.Debug("checking for new messages")
 
-	mbox, err := c.clt.Select(c.hamMailbox, &imap.SelectOptions{ReadOnly: true}).Wait()
+	mbox, err := c.clt.Select(srcMailbox, &imap.SelectOptions{ReadOnly: true}).Wait()
 	if err != nil {
 		return err
 	}
 
 	if mbox.NumMessages == 0 {
-		logger.Debug("ham mailbox is empty, nothing todo", "event", "imap.mailbox_empty")
+		logger.Debug("mailbox is empty, nothing to learn", "event", "imap.mailbox_empty")
 		return nil
 	}
 
@@ -223,7 +244,6 @@ func (c *Client) ProcessHam() error {
 	for {
 		msgData := fetchCmd.Next()
 		if msgData == nil {
-			logger.Debug("msgdata is empty")
 			break
 		}
 
@@ -258,12 +278,12 @@ func (c *Client) ProcessHam() error {
 		}
 
 		// TODO: retry Check if it failed with a temporary error
-		err = c.rspamc.Ham(context.TODO(), bytes.NewReader(txt))
+		err = learnFn(context.TODO(), bytes.NewReader(txt))
 		if err != nil {
-			logger.Info("err", "error", err)
+			logger.Warn("learning message failed", "error", err)
 			return nil
 		}
-		logger.Info("learned ham")
+		logger.Info("learned message")
 		learnedSet.AddNum(msg.UID)
 	}
 
@@ -273,12 +293,12 @@ func (c *Client) ProcessHam() error {
 		return err
 	}
 
-	_, err = c.clt.Move(learnedSet, c.inboxMailbox).Wait()
+	_, err = c.clt.Move(learnedSet, destMailbox).Wait()
 	if err != nil {
-		return fmt.Errorf("moving message to inbox mailbox failed: %w", err)
+		return fmt.Errorf("moving messages after learning successfully failed: %w", err)
 	}
 
-	logger.Info("moved messages to inbox", "mailbox.destination", c.inboxMailbox)
+	logger.Info("moved messages", "mailbox.destination", destMailbox)
 
 	return nil
 }
@@ -294,7 +314,7 @@ func (c *Client) ProcessScanBox(startStatus *SeenStatus) (*SeenStatus, error) {
 	}
 
 	if mbox.UIDValidity != startStatus.UIDValidity {
-		logger.Info("uidValidity of mailbox changed, reseting last seen UID, scanning all messages",
+		logger.Info("uidValidity of mailbox changed, resetting last seen UID, scanning all messages",
 			"uid_validity_last", startStatus.UIDValidity, "uid_validity_new", mbox.UIDValidity,
 			"event", "imap.uidvalidity_change",
 		)
@@ -444,6 +464,11 @@ func (c *Client) Run() error {
 		return fmt.Errorf("learning ham failed: %w", err)
 	}
 
+	err = c.ProcessSpam()
+	if err != nil {
+		return fmt.Errorf("learning spam failed: %w", err)
+	}
+
 	seen, err := c.ProcessScanBox(lastSeen.Seen[c.scanMailbox])
 	lastSeen.Seen[c.scanMailbox] = seen
 	if err := c.writeStateFile(lastSeen); err != nil {
@@ -460,7 +485,7 @@ func (c *Client) Run() error {
 
 	c.logger.Debug("waiting for mailbox update events")
 
-	var lastHamLearn time.Time
+	var lastLearn time.Time
 	for {
 		select {
 		// sometimes monitoring stops working and no updates are
@@ -485,11 +510,16 @@ func (c *Client) Run() error {
 				return err
 			}
 
-			if time.Since(lastHamLearn) >= c.hamLearnCheckInterval {
+			if time.Since(lastLearn) >= c.learnInterval {
 				if err := c.ProcessHam(); err != nil {
 					return err
 				}
-				lastHamLearn = time.Now()
+
+				if err := c.ProcessSpam(); err != nil {
+					return err
+				}
+
+				lastLearn = time.Now()
 			}
 
 			monitorCancelFn, err = c.Monitor(c.scanMailbox)
@@ -508,11 +538,11 @@ func (c *Client) Run() error {
 				return WrapRetryableError(err)
 			}
 
-			if time.Since(lastHamLearn) >= c.hamLearnCheckInterval {
+			if time.Since(lastLearn) >= c.learnInterval {
 				if err := c.ProcessHam(); err != nil {
 					return err
 				}
-				lastHamLearn = time.Now()
+				lastLearn = time.Now()
 			}
 
 			// TODO: we might receive multiple events at once,

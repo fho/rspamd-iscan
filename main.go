@@ -19,16 +19,17 @@ var (
 )
 
 type Config struct {
-	RspamdURL      string
-	RspamdPassword string
-	ImapAddr       string
-	ImapUser       string
-	ImapPassword   string
-	InboxMailbox   string
-	SpamMailbox    string
-	ScanMailbox    string
-	HamMailbox     string
-	SpamThreshold  float32
+	RspamdURL         string
+	RspamdPassword    string
+	ImapAddr          string
+	ImapUser          string
+	ImapPassword      string
+	InboxMailbox      string
+	SpamMailbox       string
+	ScanMailbox       string
+	HamMailbox        string
+	UndetectedMailbox string
+	SpamThreshold     float32
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -84,17 +85,18 @@ func main() {
 
 	for {
 		clt, err := imap.NewClient(&imap.Config{
-			ServerAddr:      cfg.ImapAddr,
-			User:            cfg.ImapUser,
-			Passwd:          cfg.ImapPassword,
-			ScanMailbox:     cfg.ScanMailbox,
-			InboxMailbox:    cfg.InboxMailbox,
-			HamMailbox:      cfg.HamMailbox,
-			SpamMailboxName: cfg.SpamMailbox,
-			StateFilePath:   *stateFilePath,
-			SpamTreshold:    cfg.SpamThreshold,
-			Logger:          logger,
-			Rspamc:          rspamc,
+			ServerAddr:            cfg.ImapAddr,
+			User:                  cfg.ImapUser,
+			Passwd:                cfg.ImapPassword,
+			ScanMailbox:           cfg.ScanMailbox,
+			InboxMailbox:          cfg.InboxMailbox,
+			HamMailbox:            cfg.HamMailbox,
+			SpamMailboxName:       cfg.SpamMailbox,
+			UndetectedMailboxName: cfg.UndetectedMailbox,
+			StateFilePath:         *stateFilePath,
+			SpamTreshold:          cfg.SpamThreshold,
+			Logger:                logger,
+			Rspamc:                rspamc,
 		})
 		if err != nil {
 			logger.Error("creating imap client failed", "error", err)
