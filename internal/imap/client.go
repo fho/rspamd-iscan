@@ -218,7 +218,7 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 
 	logger.Debug("checking for new messages")
 
-	mbox, err := c.clt.Select(srcMailbox, &imap.SelectOptions{ReadOnly: true}).Wait()
+	mbox, err := c.clt.Select(srcMailbox, &imap.SelectOptions{}).Wait()
 	if err != nil {
 		return err
 	}
@@ -308,7 +308,7 @@ func (c *Client) ProcessScanBox(startStatus *SeenStatus) (*SeenStatus, error) {
 
 	logger := c.logger.With("mailbox.source", c.scanMailbox)
 
-	mbox, err := c.clt.Select(c.scanMailbox, &imap.SelectOptions{ReadOnly: true}).Wait()
+	mbox, err := c.clt.Select(c.scanMailbox, &imap.SelectOptions{}).Wait()
 	if err != nil {
 		return startStatus, err
 	}
