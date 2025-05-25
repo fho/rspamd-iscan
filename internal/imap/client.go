@@ -40,29 +40,36 @@ type Client struct {
 	rspamc *rspamc.Client
 }
 
-func NewClient(
-	addr, user, passwd,
-	scanMailbox, inboxName, hamMailbox, spamMailboxName string,
-	statefilePath string,
-	spamTreshold float32,
-	logger *slog.Logger,
-	rspamc *rspamc.Client,
-) (*Client, error) {
-	logger = logger.WithGroup("imap").With("server", addr)
+type Config struct {
+	ServerAddr      string
+	User            string
+	Passwd          string
+	ScanMailbox     string
+	InboxMailbox    string
+	HamMailbox      string
+	SpamMailboxName string
+	StateFilePath   string
+	SpamTreshold    float32
+	Logger          *slog.Logger
+	Rspamc          *rspamc.Client
+}
+
+func NewClient(cfg *Config) (*Client, error) {
+	logger := cfg.Logger.WithGroup("imap").With("server", cfg.ServerAddr)
 	c := &Client{
 		logger:                logger,
-		inboxMailbox:          inboxName,
-		scanMailbox:           scanMailbox,
-		spamMailbox:           spamMailboxName,
-		hamMailbox:            hamMailbox,
+		inboxMailbox:          cfg.InboxMailbox,
+		scanMailbox:           cfg.ScanMailbox,
+		spamMailbox:           cfg.SpamMailboxName,
+		hamMailbox:            cfg.HamMailbox,
 		eventCh:               make(chan eventNewMessages, defChanBufSiz),
-		rspamc:                rspamc,
-		statefilePath:         statefilePath,
-		spamTreshold:          spamTreshold,
+		rspamc:                cfg.Rspamc,
+		statefilePath:         cfg.StateFilePath,
+		spamTreshold:          cfg.SpamTreshold,
 		hamLearnCheckInterval: 30 * time.Minute,
 	}
 
-	clt, err := imapclient.DialTLS(addr, &imapclient.Options{
+	clt, err := imapclient.DialTLS(cfg.ServerAddr, &imapclient.Options{
 		UnilateralDataHandler: &imapclient.UnilateralDataHandler{
 			Mailbox: c.mailboxUpdateHandler,
 		},
@@ -73,11 +80,11 @@ func NewClient(
 	}
 	c.clt = clt
 
-	if err := clt.Login(user, passwd).Wait(); err != nil {
+	if err := clt.Login(cfg.User, cfg.Passwd).Wait(); err != nil {
 		return nil, err
 	}
 
-	logger.Debug("connection established", "server", addr)
+	logger.Debug("connection established", "server", cfg.ServerAddr)
 
 	return c, nil
 }
@@ -250,7 +257,7 @@ func (c *Client) ProcessHam() error {
 			return errors.New("body is empty")
 		}
 
-		// TODO: retry Check if it failed with an temporary error
+		// TODO: retry Check if it failed with a temporary error
 		err = c.rspamc.Ham(context.TODO(), bytes.NewReader(txt))
 		if err != nil {
 			logger.Info("err", "error", err)

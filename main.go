@@ -83,19 +83,19 @@ func main() {
 	rspamc := rspamc.New(logger, cfg.RspamdURL, cfg.RspamdPassword)
 
 	for {
-		clt, err := imap.NewClient(
-			cfg.ImapAddr,
-			cfg.ImapUser,
-			cfg.ImapPassword,
-			cfg.ScanMailbox,
-			cfg.InboxMailbox,
-			cfg.HamMailbox,
-			cfg.SpamMailbox,
-			*stateFilePath,
-			cfg.SpamThreshold,
-			logger,
-			rspamc,
-		)
+		clt, err := imap.NewClient(&imap.Config{
+			ServerAddr:      cfg.ImapAddr,
+			User:            cfg.ImapUser,
+			Passwd:          cfg.ImapPassword,
+			ScanMailbox:     cfg.ScanMailbox,
+			InboxMailbox:    cfg.InboxMailbox,
+			HamMailbox:      cfg.HamMailbox,
+			SpamMailboxName: cfg.SpamMailbox,
+			StateFilePath:   *stateFilePath,
+			SpamTreshold:    cfg.SpamThreshold,
+			Logger:          logger,
+			Rspamc:          rspamc,
+		})
 		if err != nil {
 			logger.Error("creating imap client failed", "error", err)
 			os.Exit(1)
