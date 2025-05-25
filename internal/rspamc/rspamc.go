@@ -10,7 +10,7 @@ import (
 )
 
 type Client struct {
-	checkUrl string
+	checkURL string
 	hamURL   string
 	logger   *slog.Logger
 	password string
@@ -18,7 +18,7 @@ type Client struct {
 
 func New(logger *slog.Logger, url, password string) *Client {
 	return &Client{
-		checkUrl: url + "/checkv2",
+		checkURL: url + "/checkv2",
 		hamURL:   url + "/learnham",
 		logger:   logger.WithGroup("rspamc").With("server", url),
 		password: password,
@@ -52,12 +52,12 @@ func (c *Client) sendRequest(ctx context.Context, url string, msg io.Reader, res
 		return fmt.Errorf("request failed with status: %s", resp.Status)
 	}
 
-	const contentTypeJson = "application/json"
+	const contentTypeJSON = "application/json"
 	ctype := resp.Header.Get("Content-Type")
-	if ctype != contentTypeJson {
+	if ctype != contentTypeJSON {
 		// TODO: cancel context first
 		_, _ = io.Copy(io.Discard, resp.Body)
-		return fmt.Errorf("got response with content-type: %q, expecting: %q", ctype, contentTypeJson)
+		return fmt.Errorf("got response with content-type: %q, expecting: %q", ctype, contentTypeJSON)
 	}
 
 	if result == nil {
@@ -81,7 +81,7 @@ func (c *Client) sendRequest(ctx context.Context, url string, msg io.Reader, res
 
 func (c *Client) Check(ctx context.Context, msg io.Reader) (*Result, error) {
 	var result Result
-	err := c.sendRequest(ctx, c.checkUrl, msg, &result)
+	err := c.sendRequest(ctx, c.checkURL, msg, &result)
 	if err != nil {
 		return nil, err
 	}

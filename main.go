@@ -20,8 +20,10 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
-var version string = "version-undefined"
-var commit string = "commit-undefined"
+var (
+	version = "version-undefined"
+	commit  = "commit-undefined"
+)
 
 type Config struct {
 	RspamdURL      string
@@ -68,7 +70,7 @@ func main() {
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
-			// do not log timestamp, rspamd-iscan is normaly run as
+			// do not log timestamp, rspamd-iscan is normally run as
 			// daemon, journald/syslog already adds timestamps
 			if a.Key == slog.TimeKey {
 				return slog.Attr{}

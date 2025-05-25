@@ -10,9 +10,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/fho/rspamd-scan/internal/rspamc"
+
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
-	"github.com/fho/rspamd-scan/internal/rspamc"
 )
 
 const defChanBufSiz = 32
@@ -65,7 +66,7 @@ func NewClient(
 		UnilateralDataHandler: &imapclient.UnilateralDataHandler{
 			Mailbox: c.mailboxUpdateHandler,
 		},
-		//DebugWriter: os.Stderr,
+		// DebugWriter: os.Stderr,
 	})
 	if err != nil {
 		return nil, err
@@ -140,14 +141,14 @@ func (s *state) ToFile(path string) error {
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(path, buf, 0640)
+	err = os.WriteFile(path, buf, 0o640)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *Client) LoadOrCreateState() (*state, error) {
+func (c *Client) loadOrCreateState() (*state, error) {
 	logger := c.logger.With("statefile", c.statefilePath)
 
 	buf, err := os.ReadFile(c.statefilePath)
@@ -426,7 +427,7 @@ func (c *Client) writeStateFile(s *state) error {
 }
 
 func (c *Client) Run() error {
-	lastSeen, err := c.LoadOrCreateState()
+	lastSeen, err := c.loadOrCreateState()
 	if err != nil {
 		return err
 	}
@@ -469,7 +470,7 @@ func (c *Client) Run() error {
 			lastSeen.Seen[c.scanMailbox] = seen
 			// TODO: ProcessScanBox returns early, and returns
 			// lastSeen if there is nothing to do, do not write the
-			// file unnecesarily.
+			// file unnecessarily.
 			if err := c.writeStateFile(lastSeen); err != nil {
 				return fmt.Errorf("writing state file failed: %w", err)
 			}
@@ -519,7 +520,7 @@ func (c *Client) Run() error {
 			lastSeen.Seen[c.scanMailbox] = seen
 			// TODO: ProcessScanBox returns early, and returns
 			// lastSeen if there is nothing to do, do not write the
-			// file unnecesarily.
+			// file unnecessarily.
 			if err := c.writeStateFile(lastSeen); err != nil {
 				return fmt.Errorf("writing state file failed: %w", err)
 			}
