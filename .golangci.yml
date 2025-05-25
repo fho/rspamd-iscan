@@ -1,0 +1,49 @@
+version: "2"
+
+linters:
+  default: standard
+
+  enable:
+    - copyloopvar
+    - errcheck
+    - errorlint
+    - gocritic
+    - godox
+    - goprintffuncname
+    - govet
+    - ineffassign
+    - misspell
+    - nolintlint
+    - nosprintfhostport
+    - prealloc
+    - revive
+    - staticcheck
+    - testifylint
+    - unconvert
+    - unused
+    - usestdlibvars
+    - usetesting
+
+  settings:
+    godox:
+      keywords:
+        - FIXME
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      module-path: github.com/fho/rspamd-iscan
+      extra-rules: true
+    goimports:
+      local-prefixes:
+        - github.com/fho/rspamd-iscan
