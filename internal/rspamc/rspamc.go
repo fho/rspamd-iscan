@@ -69,7 +69,7 @@ func (c *Client) sendRequest(ctx context.Context, url string, msg io.Reader, res
 			logger.Error("rspamc reading http error body failed", "error", err)
 		}
 		if len(buf) != 0 {
-			logger.Warn("expected no response body but got one", "response", string(buf))
+			logger.Debug("response body is not processed", "body", string(buf))
 		}
 
 		return nil
