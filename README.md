@@ -5,7 +5,6 @@ rspamd-iscan is a daemon that monitors IMAP mailboxes and forwards new mails to
 It is similar to [isbg](https://gitlab.com/isbg/isbg) but uses rspamd instead of
 Spamassassin.
 
-
 rspamd-iscan scans new mails arriving in a _ScanMailbox_, if they are classified
 as Spam they are moved to the _SpamMailbox_, otherwise to the _InboxMailbox_.
 The _ScanMailBox_ is monitored via IMAP IDLE for new E-Mails and additionally
@@ -39,3 +38,8 @@ SpamThreshold       = 10.0
 
 The location of the configuration and state file can be specified via command
 line parameters.
+
+## Project Status
+
+The application is work-in-progress, the documented functionality works and is
+in-use.
