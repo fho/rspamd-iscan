@@ -116,6 +116,8 @@ func (c *Client) Monitor(mailbox string) (stop func() error, err error) {
 	logger := c.logger.With("mailbox", mailbox)
 
 	logger.Debug("starting to monitor mailbox for changes")
+	// "ReadOnly: false" causes that moved messages are shown as read instead
+	// of unread
 	d, err := c.clt.Select(mailbox, &imap.SelectOptions{ReadOnly: true}).Wait()
 	if err != nil {
 		return nil, fmt.Errorf("selecting mailbox %q failed: %w", mailbox, err)
@@ -218,7 +220,7 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 
 	logger.Debug("checking for new messages")
 
-	mbox, err := c.clt.Select(srcMailbox, &imap.SelectOptions{}).Wait()
+	mbox, err := c.clt.Select(srcMailbox, &imap.SelectOptions{ReadOnly: true}).Wait()
 	if err != nil {
 		return err
 	}
@@ -308,7 +310,7 @@ func (c *Client) ProcessScanBox(startStatus *SeenStatus) (*SeenStatus, error) {
 
 	logger := c.logger.With("mailbox.source", c.scanMailbox)
 
-	mbox, err := c.clt.Select(c.scanMailbox, &imap.SelectOptions{}).Wait()
+	mbox, err := c.clt.Select(c.scanMailbox, &imap.SelectOptions{ReadOnly: true}).Wait()
 	if err != nil {
 		return startStatus, err
 	}
