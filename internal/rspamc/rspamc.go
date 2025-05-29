@@ -83,8 +83,8 @@ func (c *Client) sendRequest(ctx context.Context, url string, msg io.Reader, res
 	return nil
 }
 
-func (c *Client) Check(ctx context.Context, msg io.Reader) (*Result, error) {
-	var result Result
+func (c *Client) Check(ctx context.Context, msg io.Reader) (*CheckResult, error) {
+	var result CheckResult
 	err := c.sendRequest(ctx, c.checkURL, msg, &result)
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func (c *Client) Spam(ctx context.Context, msg io.Reader) error {
 	return c.sendRequest(ctx, c.spamURL, msg, nil)
 }
 
-type Result struct {
+type CheckResult struct {
 	Action    string            `json:"action"`
 	Score     float32           `json:"score"`
 	IsSkipped bool              `json:"is_skipped"`
