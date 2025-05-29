@@ -58,8 +58,6 @@ func (c *Client) sendRequest(ctx context.Context, url string, msg io.Reader, res
 	const contentTypeJSON = "application/json"
 	ctype := resp.Header.Get("Content-Type")
 	if ctype != contentTypeJSON {
-		// TODO: cancel context first
-		_, _ = io.Copy(io.Discard, resp.Body)
 		return fmt.Errorf("got response with content-type: %q, expecting: %q", ctype, contentTypeJSON)
 	}
 
