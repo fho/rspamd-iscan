@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/fho/rspamd-scan/internal/imap"
 	"github.com/fho/rspamd-scan/internal/rspamc"
@@ -30,6 +31,51 @@ type Config struct {
 	HamMailbox        string
 	UndetectedMailbox string
 	SpamThreshold     float32
+}
+
+func (c *Config) String() string {
+	const unset = "UNSET"
+	const hiddenPasswd = "***"
+	var sb strings.Builder
+
+	printKv := func(k string, v any) {
+		fmt.Fprintf(&sb, "%-30v%-50v\n", k+":", v)
+	}
+
+	sb.WriteString("Configuration:\n")
+	printKv("Rspamd URL", c.RspamdURL)
+
+	if c.RspamdPassword == "" {
+		printKv("Rspamd Password", unset)
+	} else {
+		printKv("Rspamd Password", hiddenPasswd)
+	}
+
+	printKv("IMAP Server Address", c.ImapAddr)
+	printKv("IMAP User", c.ImapUser)
+
+	if c.ImapPassword == "" {
+		printKv("IMAP Password", unset)
+	} else {
+		printKv("IMAP Password", hiddenPasswd)
+	}
+
+	printKv("Spam Treshold", c.SpamThreshold)
+	printKv("Scan Mailbox", c.ScanMailbox)
+	printKv("Inbox Mailbox", c.InboxMailbox)
+	printKv("Spam Mailbox", c.SpamMailbox)
+	printKv("Undetected Mailbox", c.UndetectedMailbox)
+
+	sb.WriteRune('\n')
+	fmt.Fprintf(&sb, "Mails in %q are scanned.\n", c.ScanMailbox)
+	fmt.Fprintf(&sb, "Mails with a spam score of >=%f are moved to %q,\n", c.SpamThreshold, c.SpamMailbox)
+	fmt.Fprintf(&sb, "others are moved to %q.\n", c.InboxMailbox)
+	if c.UndetectedMailbox != "" {
+		fmt.Fprintf(&sb, "Mails in %q are learned as Spam and moved to %q.\n", c.UndetectedMailbox, c.SpamMailbox)
+	}
+	fmt.Fprintf(&sb, "Mails in %q are learned as Ham and moved to %q.\n", c.HamMailbox, c.InboxMailbox)
+
+	return sb.String()
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -79,6 +125,8 @@ func main() {
 		logger.Error("loading config failed", "error", err)
 		os.Exit(1)
 	}
+
+	fmt.Println(cfg.String())
 
 	// TODO: allow passing all attrs as single URL to rspamc http client
 	rspamc := rspamc.New(logger, cfg.RspamdURL, cfg.RspamdPassword)
