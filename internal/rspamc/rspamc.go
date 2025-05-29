@@ -93,31 +93,13 @@ func (c *Client) Check(ctx context.Context, msg io.Reader) (*Result, error) {
 }
 
 func (c *Client) Ham(ctx context.Context, msg io.Reader) error {
-	var resp learnHamReponse
-
-	err := c.sendRequest(ctx, c.hamURL, msg, &resp)
-	if err != nil {
-		return err
-	}
-
-	// resp code 208 == already learned, returns an json with an "error"
+	// resp code 208 == already learned, returns a json with an "error"
 	// field
-
-	// It is also unsuccessful if the same message has already learned
-	// before
-	// if !resp.Success {
-	// 	return errors.New("unsuccessful")
-	// }
-
-	return nil
+	return c.sendRequest(ctx, c.hamURL, msg, nil)
 }
 
 func (c *Client) Spam(ctx context.Context, msg io.Reader) error {
 	return c.sendRequest(ctx, c.spamURL, msg, nil)
-}
-
-type learnHamReponse struct {
-	Success bool `json:"success"`
 }
 
 type Result struct {
