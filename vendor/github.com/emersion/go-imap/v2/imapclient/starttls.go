@@ -25,7 +25,7 @@ func (c *Client) startTLS(config *tls.Config) error {
 	// commands until a server response is seen and the TLS negotiation is
 	// complete
 
-	if err := cmd.Wait(); err != nil {
+	if err := cmd.wait(); err != nil {
 		return err
 	}
 
@@ -66,7 +66,7 @@ func (c *Client) upgradeStartTLS(startTLS *startTLSCommand) {
 }
 
 type startTLSCommand struct {
-	cmd
+	commandBase
 	tlsConfig *tls.Config
 
 	upgradeDone chan<- struct{}

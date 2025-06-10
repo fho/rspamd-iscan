@@ -124,7 +124,7 @@ func (c *Client) handleList() error {
 
 // ListCommand is a LIST command.
 type ListCommand struct {
-	cmd
+	commandBase
 	mailboxes chan *imap.ListData
 
 	returnStatus bool
@@ -147,7 +147,7 @@ func (cmd *ListCommand) Close() error {
 	for cmd.Next() != nil {
 		// ignore
 	}
-	return cmd.cmd.Wait()
+	return cmd.wait()
 }
 
 // Collect accumulates mailboxes into a list.

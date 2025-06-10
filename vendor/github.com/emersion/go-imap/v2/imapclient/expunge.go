@@ -45,7 +45,7 @@ func (c *Client) handleExpunge(seqNum uint32) error {
 // The caller must fully consume the ExpungeCommand. A simple way to do so is
 // to defer a call to FetchCommand.Close.
 type ExpungeCommand struct {
-	cmd
+	commandBase
 	seqNums chan uint32
 }
 
@@ -65,7 +65,7 @@ func (cmd *ExpungeCommand) Close() error {
 	for cmd.Next() != 0 {
 		// ignore
 	}
-	return cmd.cmd.Wait()
+	return cmd.wait()
 }
 
 // Collect accumulates expunged sequence numbers into a list.

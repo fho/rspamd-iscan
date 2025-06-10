@@ -29,6 +29,7 @@ import (
 	"net"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -320,7 +321,14 @@ func (c *Client) Caps() imap.CapSet {
 		c.mutex.Unlock()
 	}
 
-	<-capCh
+	timer := time.NewTimer(respReadTimeout)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-capCh:
+		// ok
+	}
 
 	// TODO: this is racy if caps are reset before we get the reply
 	c.mutex.Lock()
@@ -397,7 +405,7 @@ func (c *Client) beginCommand(name string, cmd command) *commandEncoder {
 	tag := fmt.Sprintf("T%v", c.cmdTag)
 
 	baseCmd := cmd.base()
-	*baseCmd = Command{
+	*baseCmd = commandBase{
 		tag:  tag,
 		done: make(chan error, 1),
 	}
@@ -613,6 +621,9 @@ func (c *Client) readResponse() error {
 		return fmt.Errorf("in response: cannot read type: %v", c.dec.Err())
 	}
 
+	// Change typ to uppercase, as it's case-insensitive
+	typ = strings.ToUpper(typ)
+
 	var (
 		token    string
 		err      error
@@ -716,7 +727,14 @@ func (c *Client) readResponseTagged(tag, typ string) (startTLS *startTLSCommand,
 			if err != nil {
 				return nil, fmt.Errorf("in resp-code-copy: %v", err)
 			}
-			if cmd, ok := cmd.(*CopyCommand); ok {
+			switch cmd := cmd.(type) {
+			case *CopyCommand:
+				cmd.data.UIDValidity = uidValidity
+				cmd.data.SourceUIDs = srcUIDs
+				cmd.data.DestUIDs = dstUIDs
+			case *MoveCommand:
+				// This can happen when Client.Move falls back to COPY +
+				// STORE + EXPUNGE
 				cmd.data.UIDValidity = uidValidity
 				cmd.data.SourceUIDs = srcUIDs
 				cmd.data.DestUIDs = dstUIDs
@@ -782,7 +800,8 @@ func (c *Client) readResponseData(typ string) error {
 		}
 	}
 
-	switch typ {
+	// All response type are case insensitive
+	switch strings.ToUpper(typ) {
 	case "OK", "PREAUTH", "NO", "BAD", "BYE": // resp-cond-state / resp-cond-bye / resp-cond-auth
 		// Some servers don't provide a text even if the RFC requires it,
 		// see #500 and #502
@@ -900,6 +919,8 @@ func (c *Client) readResponseData(typ string) error {
 			}
 			close(c.greetingCh)
 		}
+	case "ID":
+		return c.handleID()
 	case "CAPABILITY":
 		return c.handleCapability()
 	case "ENABLED":
@@ -958,6 +979,16 @@ func (c *Client) readResponseData(typ string) error {
 			return c.dec.Err()
 		}
 		return c.handleQuotaRoot()
+	case "MYRIGHTS":
+		if !c.dec.ExpectSP() {
+			return c.dec.Err()
+		}
+		return c.handleMyRights()
+	case "ACL":
+		if !c.dec.ExpectSP() {
+			return c.dec.Err()
+		}
+		return c.handleGetACL()
 	default:
 		return fmt.Errorf("unsupported response type %q", typ)
 	}
@@ -991,7 +1022,7 @@ func (c *Client) Noop() *Command {
 func (c *Client) Logout() *Command {
 	cmd := &logoutCommand{}
 	c.beginCommand("LOGOUT", cmd).end()
-	return &cmd.cmd
+	return &cmd.Command
 }
 
 // Login sends a LOGIN command.
@@ -1000,7 +1031,7 @@ func (c *Client) Login(username, password string) *Command {
 	enc := c.beginCommand("LOGIN", cmd)
 	enc.SP().String(username).SP().String(password)
 	enc.end()
-	return &cmd.cmd
+	return &cmd.Command
 }
 
 // Delete sends a DELETE command.
@@ -1053,7 +1084,7 @@ func uidCmdName(name string, kind imapwire.NumKind) string {
 type commandEncoder struct {
 	*imapwire.Encoder
 	client *Client
-	cmd    *Command
+	cmd    *commandBase
 }
 
 // end ends an outgoing command.
@@ -1109,7 +1140,7 @@ func (lw literalWriter) Close() error {
 // continuationRequest is a pending continuation request.
 type continuationRequest struct {
 	*imapwire.ContinuationRequest
-	cmd *Command
+	cmd *commandBase
 }
 
 // UnilateralDataMailbox describes a mailbox status update.
@@ -1144,35 +1175,41 @@ type UnilateralDataHandler struct {
 // Commands are represented by the Command type, but can be extended by other
 // types (e.g. CapabilityCommand).
 type command interface {
-	base() *Command
+	base() *commandBase
 }
 
-// Command is a basic IMAP command.
-type Command struct {
+type commandBase struct {
 	tag  string
 	done chan error
 	err  error
 }
 
-func (cmd *Command) base() *Command {
+func (cmd *commandBase) base() *commandBase {
 	return cmd
 }
 
-// Wait blocks until the command has completed.
-func (cmd *Command) Wait() error {
+func (cmd *commandBase) wait() error {
 	if cmd.err == nil {
 		cmd.err = <-cmd.done
 	}
 	return cmd.err
 }
 
-type cmd = Command // type alias to avoid exporting anonymous struct fields
+// Command is a basic IMAP command.
+type Command struct {
+	commandBase
+}
+
+// Wait blocks until the command has completed.
+func (cmd *Command) Wait() error {
+	return cmd.wait()
+}
 
 type loginCommand struct {
-	cmd
+	Command
 }
 
 // logoutCommand is a LOGOUT command.
 type logoutCommand struct {
-	cmd
+	Command
 }

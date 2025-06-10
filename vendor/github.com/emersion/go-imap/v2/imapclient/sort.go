@@ -74,11 +74,11 @@ func (c *Client) UIDSort(options *SortOptions) *SortCommand {
 
 // SortCommand is a SORT command.
 type SortCommand struct {
-	cmd
+	commandBase
 	nums []uint32
 }
 
 func (cmd *SortCommand) Wait() ([]uint32, error) {
-	err := cmd.cmd.Wait()
+	err := cmd.wait()
 	return cmd.nums, err
 }

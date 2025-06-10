@@ -148,7 +148,7 @@ func writeSectionPartial(enc *imapwire.Encoder, partial *imap.SectionPartial) {
 
 // FetchCommand is a FETCH command.
 type FetchCommand struct {
-	cmd
+	commandBase
 
 	numSet     imap.NumSet
 	recvSeqSet imap.SeqSet
@@ -206,7 +206,7 @@ func (cmd *FetchCommand) Close() error {
 	for cmd.Next() != nil {
 		// ignore
 	}
-	return cmd.cmd.Wait()
+	return cmd.wait()
 }
 
 // Collect accumulates message data into a list.
@@ -234,6 +234,61 @@ func (cmd *FetchCommand) Collect() ([]*FetchMessageBuffer, error) {
 		l = append(l, buf)
 	}
 	return l, cmd.Close()
+}
+
+func matchFetchItemBodySection(cmd, resp *imap.FetchItemBodySection) bool {
+	if cmd.Specifier != resp.Specifier {
+		return false
+	}
+
+	if !intSliceEqual(cmd.Part, resp.Part) {
+		return false
+	}
+	if !stringSliceEqualFold(cmd.HeaderFields, resp.HeaderFields) {
+		return false
+	}
+	if !stringSliceEqualFold(cmd.HeaderFieldsNot, resp.HeaderFieldsNot) {
+		return false
+	}
+
+	if (cmd.Partial == nil) != (resp.Partial == nil) {
+		return false
+	}
+	if cmd.Partial != nil && cmd.Partial.Offset != resp.Partial.Offset {
+		return false
+	}
+
+	// Ignore Partial.Size and Peek: these are not echoed back by the server
+	return true
+}
+
+func matchFetchItemBinarySection(cmd, resp *imap.FetchItemBinarySection) bool {
+	// Ignore Partial and Peek: these are not echoed back by the server
+	return intSliceEqual(cmd.Part, resp.Part)
+}
+
+func intSliceEqual(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func stringSliceEqualFold(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !strings.EqualFold(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // FetchMessageData contains a message's FETCH data.
@@ -313,6 +368,8 @@ var (
 )
 
 // FetchItemDataBodySection holds data returned by FETCH BODY[].
+//
+// Literal might be nil.
 type FetchItemDataBodySection struct {
 	Section *imap.FetchItemBodySection
 	Literal imap.LiteralReader
@@ -321,10 +378,20 @@ type FetchItemDataBodySection struct {
 func (FetchItemDataBodySection) fetchItemData() {}
 
 func (item FetchItemDataBodySection) discard() {
-	io.Copy(io.Discard, item.Literal)
+	if item.Literal != nil {
+		io.Copy(io.Discard, item.Literal)
+	}
+}
+
+// MatchCommand checks whether a section returned by the server in a response
+// is compatible with a section requested by the client in a command.
+func (dataItem *FetchItemDataBodySection) MatchCommand(item *imap.FetchItemBodySection) bool {
+	return matchFetchItemBodySection(item, dataItem.Section)
 }
 
 // FetchItemDataBinarySection holds data returned by FETCH BINARY[].
+//
+// Literal might be nil.
 type FetchItemDataBinarySection struct {
 	Section *imap.FetchItemBinarySection
 	Literal imap.LiteralReader
@@ -333,7 +400,15 @@ type FetchItemDataBinarySection struct {
 func (FetchItemDataBinarySection) fetchItemData() {}
 
 func (item FetchItemDataBinarySection) discard() {
-	io.Copy(io.Discard, item.Literal)
+	if item.Literal != nil {
+		io.Copy(io.Discard, item.Literal)
+	}
+}
+
+// MatchCommand checks whether a section returned by the server in a response
+// is compatible with a section requested by the client in a command.
+func (dataItem *FetchItemDataBinarySection) MatchCommand(item *imap.FetchItemBinarySection) bool {
+	return matchFetchItemBinarySection(item, dataItem.Section)
 }
 
 // FetchItemDataFlags holds data returned by FETCH FLAGS.
@@ -388,6 +463,13 @@ type FetchItemDataBinarySectionSize struct {
 
 func (FetchItemDataBinarySectionSize) fetchItemData() {}
 
+// MatchCommand checks whether a section size returned by the server in a
+// response is compatible with a section size requested by the client in a
+// command.
+func (data *FetchItemDataBinarySectionSize) MatchCommand(item *imap.FetchItemBinarySectionSize) bool {
+	return intSliceEqual(item.Part, data.Part)
+}
+
 // FetchItemDataModSeq holds data returned by FETCH MODSEQ.
 //
 // This requires the CONDSTORE extension.
@@ -396,6 +478,20 @@ type FetchItemDataModSeq struct {
 }
 
 func (FetchItemDataModSeq) fetchItemData() {}
+
+// FetchBodySectionBuffer is a buffer for the data returned by
+// FetchItemBodySection.
+type FetchBodySectionBuffer struct {
+	Section *imap.FetchItemBodySection
+	Bytes   []byte
+}
+
+// FetchBinarySectionBuffer is a buffer for the data returned by
+// FetchItemBinarySection.
+type FetchBinarySectionBuffer struct {
+	Section *imap.FetchItemBinarySection
+	Bytes   []byte
+}
 
 // FetchMessageBuffer is a buffer for the data returned by FetchMessageData.
 //
@@ -408,8 +504,8 @@ type FetchMessageBuffer struct {
 	RFC822Size        int64
 	UID               imap.UID
 	BodyStructure     imap.BodyStructure
-	BodySection       map[*imap.FetchItemBodySection][]byte
-	BinarySection     map[*imap.FetchItemBinarySection][]byte
+	BodySection       []FetchBodySectionBuffer
+	BinarySection     []FetchBinarySectionBuffer
 	BinarySectionSize []FetchItemDataBinarySectionSize
 	ModSeq            uint64 // requires CONDSTORE
 }
@@ -417,23 +513,31 @@ type FetchMessageBuffer struct {
 func (buf *FetchMessageBuffer) populateItemData(item FetchItemData) error {
 	switch item := item.(type) {
 	case FetchItemDataBodySection:
-		b, err := io.ReadAll(item.Literal)
-		if err != nil {
-			return err
+		var b []byte
+		if item.Literal != nil {
+			var err error
+			b, err = io.ReadAll(item.Literal)
+			if err != nil {
+				return err
+			}
 		}
-		if buf.BodySection == nil {
-			buf.BodySection = make(map[*imap.FetchItemBodySection][]byte)
-		}
-		buf.BodySection[item.Section] = b
+		buf.BodySection = append(buf.BodySection, FetchBodySectionBuffer{
+			Section: item.Section,
+			Bytes:   b,
+		})
 	case FetchItemDataBinarySection:
-		b, err := io.ReadAll(item.Literal)
-		if err != nil {
-			return err
+		var b []byte
+		if item.Literal != nil {
+			var err error
+			b, err = io.ReadAll(item.Literal)
+			if err != nil {
+				return err
+			}
 		}
-		if buf.BinarySection == nil {
-			buf.BinarySection = make(map[*imap.FetchItemBinarySection][]byte)
-		}
-		buf.BinarySection[item.Section] = b
+		buf.BinarySection = append(buf.BinarySection, FetchBinarySectionBuffer{
+			Section: item.Section,
+			Bytes:   b,
+		})
 	case FetchItemDataFlags:
 		buf.Flags = item.Flags
 	case FetchItemDataEnvelope:
@@ -454,6 +558,42 @@ func (buf *FetchMessageBuffer) populateItemData(item FetchItemData) error {
 		panic(fmt.Errorf("unsupported fetch item data %T", item))
 	}
 	return nil
+}
+
+// FindBodySection returns the contents of a requested body section.
+//
+// If the body section is not found, nil is returned.
+func (buf *FetchMessageBuffer) FindBodySection(section *imap.FetchItemBodySection) []byte {
+	for _, s := range buf.BodySection {
+		if matchFetchItemBodySection(section, s.Section) {
+			return s.Bytes
+		}
+	}
+	return nil
+}
+
+// FindBinarySection returns the contents of a requested binary section.
+//
+// If the binary section is not found, nil is returned.
+func (buf *FetchMessageBuffer) FindBinarySection(section *imap.FetchItemBinarySection) []byte {
+	for _, s := range buf.BinarySection {
+		if matchFetchItemBinarySection(section, s.Section) {
+			return s.Bytes
+		}
+	}
+	return nil
+}
+
+// FindBinarySectionSize returns a requested binary section size.
+//
+// If the binary section size is not found, false is returned.
+func (buf *FetchMessageBuffer) FindBinarySectionSize(part []int) (uint32, bool) {
+	for _, s := range buf.BinarySectionSize {
+		if intSliceEqual(part, s.Part) {
+			return s.Size, true
+		}
+	}
+	return 0, false
 }
 
 func (c *Client) handleFetch(seqNum uint32) error {
@@ -638,6 +778,9 @@ func (c *Client) handleFetch(seqNum uint32) error {
 				IsExtended:    attName == "BODYSTRUCTURE",
 			}
 		case "BINARY.SIZE":
+			if !dec.ExpectSpecial('[') {
+				return dec.Err()
+			}
 			part, dot := readSectionPart(dec)
 			if dot {
 				return fmt.Errorf("in section-binary: expected number after dot")

@@ -121,7 +121,7 @@ func (c *Client) idle() (*idleCommand, error) {
 
 // idleCommand represents a singular IDLE command, without the restart logic.
 type idleCommand struct {
-	cmd
+	commandBase
 	enc *commandEncoder
 }
 
@@ -153,5 +153,5 @@ func (cmd *idleCommand) Wait() error {
 	if cmd.enc != nil {
 		panic("imapclient: idleCommand.Close must be called before Wait")
 	}
-	return cmd.cmd.Wait()
+	return cmd.wait()
 }

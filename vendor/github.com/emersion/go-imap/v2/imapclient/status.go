@@ -79,13 +79,13 @@ func (c *Client) handleStatus() error {
 
 // StatusCommand is a STATUS command.
 type StatusCommand struct {
-	cmd
+	commandBase
 	mailbox string
 	data    imap.StatusData
 }
 
 func (cmd *StatusCommand) Wait() (*imap.StatusData, error) {
-	return &cmd.data, cmd.cmd.Wait()
+	return &cmd.data, cmd.wait()
 }
 
 func readStatus(dec *imapwire.Decoder) (*imap.StatusData, error) {

@@ -18,12 +18,12 @@ func (c *Client) Copy(numSet imap.NumSet, mailbox string) *CopyCommand {
 
 // CopyCommand is a COPY command.
 type CopyCommand struct {
-	cmd
+	commandBase
 	data imap.CopyData
 }
 
 func (cmd *CopyCommand) Wait() (*imap.CopyData, error) {
-	return &cmd.data, cmd.cmd.Wait()
+	return &cmd.data, cmd.wait()
 }
 
 func readRespCodeCopyUID(dec *imapwire.Decoder) (uidValidity uint32, srcUIDs, dstUIDs imap.UIDSet, err error) {

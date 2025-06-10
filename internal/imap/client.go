@@ -269,7 +269,7 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 		}
 		var txt []byte
 		for _, b := range msg.BodySection {
-			txt = b
+			txt = b.Bytes
 			break
 		}
 		if txt == nil {
@@ -381,7 +381,7 @@ func (c *Client) ProcessScanBox(startStatus *SeenStatus) (*SeenStatus, error) {
 		}
 		var txt []byte
 		for _, b := range msg.BodySection {
-			txt = b
+			txt = b.Bytes
 			break
 		}
 		if txt == nil {

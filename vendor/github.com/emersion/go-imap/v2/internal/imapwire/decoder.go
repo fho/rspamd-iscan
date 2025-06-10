@@ -26,6 +26,11 @@ func IsAtomChar(ch byte) bool {
 	}
 }
 
+// Is non-empty char
+func isAStringChar(ch byte) bool {
+	return IsAtomChar(ch) || ch == ']'
+}
+
 // DecoderExpectError is an error due to the Decoder.Expect family of methods.
 type DecoderExpectError struct {
 	Message string
@@ -47,6 +52,9 @@ type Decoder struct {
 	// CheckBufferedLiteralFunc is called when a literal is about to be decoded
 	// and needs to be fully buffered in memory.
 	CheckBufferedLiteralFunc func(size int64, nonSync bool) error
+	// MaxSize defines a maximum number of bytes to be read from the input.
+	// Literals are ignored.
+	MaxSize int64
 
 	r         *bufio.Reader
 	side      ConnSide
@@ -54,6 +62,7 @@ type Decoder struct {
 	literal   bool
 	crlf      bool
 	listDepth int
+	readBytes int64
 }
 
 // NewDecoder creates a new decoder.
@@ -65,6 +74,7 @@ func (dec *Decoder) mustUnreadByte() {
 	if err := dec.r.UnreadByte(); err != nil {
 		panic(fmt.Errorf("imapwire: failed to unread byte: %v", err))
 	}
+	dec.readBytes--
 }
 
 // Err returns the decoder error, if any.
@@ -83,6 +93,9 @@ func (dec *Decoder) returnErr(err error) bool {
 }
 
 func (dec *Decoder) readByte() (byte, bool) {
+	if dec.MaxSize > 0 && dec.readBytes > dec.MaxSize {
+		return 0, dec.returnErr(fmt.Errorf("imapwire: max size exceeded"))
+	}
 	dec.crlf = false
 	if dec.literal {
 		return 0, dec.returnErr(fmt.Errorf("imapwire: cannot decode while a literal is open"))
@@ -94,6 +107,7 @@ func (dec *Decoder) readByte() (byte, bool) {
 		}
 		return b, dec.returnErr(err)
 	}
+	dec.readBytes++
 	return b, true
 }
 
@@ -399,8 +413,9 @@ func (dec *Decoder) ExpectAString(ptr *string) bool {
 	if dec.Literal(ptr) {
 		return true
 	}
-	// TODO: accept unquoted resp-specials
-	return dec.ExpectAtom(ptr)
+	// We cannot do dec.Atom(ptr) here because sometimes mailbox names are unquoted,
+	// and they can contain special characters like `]`.
+	return dec.Expect(dec.Func(ptr, isAStringChar), "ASTRING-CHAR")
 }
 
 func (dec *Decoder) String(ptr *string) bool {

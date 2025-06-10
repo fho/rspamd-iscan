@@ -34,7 +34,7 @@ func (c *Client) Append(mailbox string, size int64, options *imap.AppendOptions)
 //
 // Callers must write the message contents, then call Close.
 type AppendCommand struct {
-	cmd
+	commandBase
 	enc  *commandEncoder
 	wc   io.WriteCloser
 	data imap.AppendData
@@ -54,5 +54,5 @@ func (cmd *AppendCommand) Close() error {
 }
 
 func (cmd *AppendCommand) Wait() (*imap.AppendData, error) {
-	return &cmd.data, cmd.cmd.Wait()
+	return &cmd.data, cmd.wait()
 }

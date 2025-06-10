@@ -148,17 +148,15 @@ func (c *Client) handleESearch() error {
 
 // SearchCommand is a SEARCH command.
 type SearchCommand struct {
-	cmd
+	commandBase
 	data imap.SearchData
 }
 
 func (cmd *SearchCommand) Wait() (*imap.SearchData, error) {
-	return &cmd.data, cmd.cmd.Wait()
+	return &cmd.data, cmd.wait()
 }
 
 func writeSearchKey(enc *imapwire.Encoder, criteria *imap.SearchCriteria) {
-	enc.Special('(')
-
 	firstItem := true
 	encodeItem := func() *imapwire.Encoder {
 		if !firstItem {
@@ -250,20 +248,24 @@ func writeSearchKey(enc *imapwire.Encoder, criteria *imap.SearchCriteria) {
 
 	for _, not := range criteria.Not {
 		encodeItem().Atom("NOT").SP()
+		enc.Special('(')
 		writeSearchKey(enc, &not)
+		enc.Special(')')
 	}
 	for _, or := range criteria.Or {
 		encodeItem().Atom("OR").SP()
+		enc.Special('(')
 		writeSearchKey(enc, &or[0])
+		enc.Special(')')
 		enc.SP()
+		enc.Special('(')
 		writeSearchKey(enc, &or[1])
+		enc.Special(')')
 	}
 
 	if firstItem {
 		enc.Atom("ALL")
 	}
-
-	enc.Special(')')
 }
 
 func flagSearchKey(flag imap.Flag) string {

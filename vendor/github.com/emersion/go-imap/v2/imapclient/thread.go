@@ -52,12 +52,12 @@ func (c *Client) handleThread() error {
 
 // ThreadCommand is a THREAD command.
 type ThreadCommand struct {
-	cmd
+	commandBase
 	data []ThreadData
 }
 
 func (cmd *ThreadCommand) Wait() ([]ThreadData, error) {
-	err := cmd.cmd.Wait()
+	err := cmd.wait()
 	return cmd.data, err
 }
 

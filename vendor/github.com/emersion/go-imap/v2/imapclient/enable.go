@@ -20,7 +20,7 @@ func (c *Client) Enable(caps ...imap.Cap) *EnableCommand {
 			done := make(chan error)
 			close(done)
 			err := fmt.Errorf("imapclient: cannot enable %q: not supported", name)
-			return &EnableCommand{cmd: Command{done: done, err: err}}
+			return &EnableCommand{commandBase: commandBase{done: done, err: err}}
 		}
 	}
 
@@ -54,12 +54,12 @@ func (c *Client) handleEnabled() error {
 
 // EnableCommand is an ENABLE command.
 type EnableCommand struct {
-	cmd
+	commandBase
 	data EnableData
 }
 
 func (cmd *EnableCommand) Wait() (*EnableData, error) {
-	return &cmd.data, cmd.cmd.Wait()
+	return &cmd.data, cmd.wait()
 }
 
 // EnableData is the data returned by the ENABLE command.

@@ -30,7 +30,7 @@ func (c *Client) Select(mailbox string, options *imap.SelectOptions) *SelectComm
 func (c *Client) Unselect() *Command {
 	cmd := &unselectCommand{}
 	c.beginCommand("UNSELECT", cmd).end()
-	return &cmd.cmd
+	return &cmd.Command
 }
 
 // UnselectAndExpunge sends a CLOSE command.
@@ -39,7 +39,7 @@ func (c *Client) Unselect() *Command {
 func (c *Client) UnselectAndExpunge() *Command {
 	cmd := &unselectCommand{}
 	c.beginCommand("CLOSE", cmd).end()
-	return &cmd.cmd
+	return &cmd.Command
 }
 
 func (c *Client) handleFlags() error {
@@ -86,15 +86,15 @@ func (c *Client) handleExists(num uint32) error {
 
 // SelectCommand is a SELECT command.
 type SelectCommand struct {
-	cmd
+	commandBase
 	mailbox string
 	data    imap.SelectData
 }
 
 func (cmd *SelectCommand) Wait() (*imap.SelectData, error) {
-	return &cmd.data, cmd.cmd.Wait()
+	return &cmd.data, cmd.wait()
 }
 
 type unselectCommand struct {
-	cmd
+	Command
 }

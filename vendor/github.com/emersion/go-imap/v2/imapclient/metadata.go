@@ -132,13 +132,13 @@ func (c *Client) handleMetadata() error {
 
 // GetMetadataCommand is a GETMETADATA command.
 type GetMetadataCommand struct {
-	cmd
+	commandBase
 	mailbox string
 	data    GetMetadataData
 }
 
 func (cmd *GetMetadataCommand) Wait() (*GetMetadataData, error) {
-	return &cmd.data, cmd.cmd.Wait()
+	return &cmd.data, cmd.wait()
 }
 
 // GetMetadataData is the data returned by the GETMETADATA command.

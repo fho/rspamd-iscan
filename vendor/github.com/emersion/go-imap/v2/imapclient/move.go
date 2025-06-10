@@ -40,7 +40,7 @@ func (c *Client) Move(numSet imap.NumSet, mailbox string) *MoveCommand {
 
 // MoveCommand is a MOVE command.
 type MoveCommand struct {
-	cmd
+	commandBase
 	data MoveData
 
 	// Fallback
@@ -49,7 +49,7 @@ type MoveCommand struct {
 }
 
 func (cmd *MoveCommand) Wait() (*MoveData, error) {
-	if err := cmd.cmd.Wait(); err != nil {
+	if err := cmd.wait(); err != nil {
 		return nil, err
 	}
 	if cmd.store != nil {
