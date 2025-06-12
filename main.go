@@ -19,6 +19,7 @@ var (
 	commit  = "commit-undefined"
 )
 
+// TODO: move Config to own file or package
 type Config struct {
 	RspamdURL         string
 	RspamdPassword    string
@@ -29,8 +30,11 @@ type Config struct {
 	SpamMailbox       string
 	ScanMailbox       string
 	HamMailbox        string
+	BackupMailbox     string
 	UndetectedMailbox string
 	SpamThreshold     float32
+	TempDir           string
+	KeepTempFiles     bool
 }
 
 func (c *Config) String() string {
@@ -65,9 +69,12 @@ func (c *Config) String() string {
 	printKv("Inbox Mailbox", c.InboxMailbox)
 	printKv("Spam Mailbox", c.SpamMailbox)
 	printKv("Undetected Mailbox", c.UndetectedMailbox)
+	printKv("Backup Mailbox", c.BackupMailbox)
+	printKv("Temporary Directory", c.TempDir)
+	printKv("Keep Temporary Files", c.KeepTempFiles)
 
 	sb.WriteRune('\n')
-	fmt.Fprintf(&sb, "Mails in %q are scanned.\n", c.ScanMailbox)
+	fmt.Fprintf(&sb, "Mails in %q are scanned and backuped to %q.\n", c.ScanMailbox, c.BackupMailbox)
 	fmt.Fprintf(&sb, "Mails with a spam score of >=%f are moved to %q,\n", c.SpamThreshold, c.SpamMailbox)
 	fmt.Fprintf(&sb, "others are moved to %q.\n", c.InboxMailbox)
 	if c.UndetectedMailbox != "" {
@@ -89,15 +96,57 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	if result.SpamThreshold == 0 {
-		return nil, errors.New("spam thresold must be >0")
-	}
 	return &result, nil
+}
+
+func (c *Config) SetDefaults() {
+	if c.TempDir == "" {
+		c.TempDir = os.TempDir()
+	}
+}
+
+func (c *Config) Validate() error {
+	if c.ScanMailbox == c.InboxMailbox {
+		return errors.New("ScanMailbox and InboxMailbox must differ")
+	}
+
+	if c.ScanMailbox == c.SpamMailbox {
+		return errors.New("ScanMailbox and SpamMailbox must differ")
+	}
+
+	if c.ScanMailbox == c.HamMailbox {
+		return errors.New("HamMailbox and SpamMailbox must differ")
+	}
+
+	if c.BackupMailbox == "" {
+		return errors.New("BackupMailbox can not be empty")
+	}
+
+	if c.BackupMailbox == c.InboxMailbox {
+		return errors.New("BackupMailbox and InboxMailbox must differ")
+	}
+
+	// Using the same mailbox for Spam, Ham and/or Backup would be weird but
+	// should work fine!
+
+	if c.SpamThreshold == 0 {
+		return errors.New("SpamThreshold must be >0")
+	}
+
+	fd, err := os.Stat(c.TempDir)
+	if err != nil {
+		return fmt.Errorf("invalid TempDir (%s): %w", c.TempDir, err)
+	}
+
+	if !fd.IsDir() {
+		return fmt.Errorf("specified TempDir (%s) is not a directory", c.TempDir)
+	}
+
+	return nil
 }
 
 func main() {
 	cfgPath := flag.String("cfg-file", "rspamd-iscan.toml", "Path to the rspamd-iscan config file")
-	stateFilePath := flag.String("state-file", ".rspamd-iscan.state", "Path to a file that stores the scan state")
 	printVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 
@@ -126,7 +175,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	cfg.SetDefaults()
+
 	fmt.Println(cfg.String())
+
+	if err := cfg.Validate(); err != nil {
+		logger.Error("validating config failed", "error", err)
+		os.Exit(1)
+	}
 
 	// TODO: allow passing all attrs as single URL to rspamc http client
 	rspamc := rspamc.New(logger, cfg.RspamdURL, cfg.RspamdPassword)
@@ -141,8 +197,10 @@ func main() {
 			HamMailbox:            cfg.HamMailbox,
 			SpamMailboxName:       cfg.SpamMailbox,
 			UndetectedMailboxName: cfg.UndetectedMailbox,
-			StateFilePath:         *stateFilePath,
+			BackupMailboxName:     cfg.BackupMailbox,
 			SpamTreshold:          cfg.SpamThreshold,
+			TempDir:               cfg.TempDir,
+			KeepTempFiles:         cfg.KeepTempFiles,
 			Logger:                logger,
 			Rspamc:                rspamc,
 		})
