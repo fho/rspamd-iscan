@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func AssertNoErr(t *testing.T, err error, msg ...string) {
+func AssertNoErr(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatal(err)
