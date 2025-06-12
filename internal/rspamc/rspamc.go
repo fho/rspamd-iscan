@@ -83,7 +83,9 @@ func (c *Client) sendRequest(ctx context.Context, url string, msg io.Reader, res
 
 func (c *Client) Check(ctx context.Context, msg io.Reader) (*CheckResult, error) {
 	var result CheckResult
-	err := c.sendRequest(ctx, c.checkURL, msg, &result)
+	// wrap in NopCloser to prevent that http.NewRequest closes the reader,
+	// it is not responsible for closing it, the caller is
+	err := c.sendRequest(ctx, c.checkURL, io.NopCloser(msg), &result)
 	if err != nil {
 		return nil, err
 	}
@@ -101,10 +103,10 @@ func (c *Client) Spam(ctx context.Context, msg io.Reader) error {
 }
 
 type CheckResult struct {
-	Action    string            `json:"action"`
-	Score     float32           `json:"score"`
-	IsSkipped bool              `json:"is_skipped"`
-	Symbols   map[string]Symbol `json:"symbols"`
+	Action    string             `json:"action"`
+	Score     float32            `json:"score"`
+	IsSkipped bool               `json:"is_skipped"`
+	Symbols   map[string]*Symbol `json:"symbols"`
 }
 
 // https://rspamd.com/doc/architecture/protocol.html#protocol-basics

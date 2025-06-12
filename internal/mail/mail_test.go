@@ -15,6 +15,13 @@ func AssertNoErr(t *testing.T, err error) {
 	}
 }
 
+func AssertErr(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected an error but got none")
+	}
+}
+
 func TestAddHeaders(t *testing.T) {
 	const expected = "From: someone@example.com\r\nTo: someone_else@example.com\r\nSubject: An RFC 822 formatted message\r\nNew-Header1: v1\r\nNew-Header2: v2\r\n\r\nThis is the plain text body of the message. Note the blank line\r\nbetween the header information and the body of the message.\r\n"
 

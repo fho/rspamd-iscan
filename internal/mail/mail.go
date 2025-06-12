@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -19,37 +20,57 @@ const maxLineLength = 1000
 // strEmailHdrCharsOnly removes all non-printable ASCII chars and colons from s
 func strEmailHdrCharsOnly(s string) string {
 	return strings.Map(func(r rune) rune {
-		if r < 33 || r > 126 || r == ':' {
-			return -1
+		if r >= 33 && r <= 126 && r != ':' {
+			return r
 		}
-		return r
+
+		return -1
 	}, s)
 }
 
-// AsHeaders converts m to [RFC2822] E-Mail Headers (Key: Value\r\n)
-// Non-allowed characters are dropped, if a key-value has more than
-// [maxLineLength]-3 chars, the map entry is omitted.
+// AsHeader converts the header name and body to an email header line.
+// The line is terminated with \r\n.
+// If the header is invalid because it is too long or name or body contain
+// an invalid characters an error is returned.
 //
-// [RFC2822]: https://datatracker.ietf.org/doc/html/rfc2822#section-2.2
-func AsHeaders(m map[string]string) []byte {
-	var buf bytes.Buffer
-
-	for k, v := range m {
-		hdr := append([]byte(strEmailHdrCharsOnly(k)), ':', ' ')
-		hdr = append(hdr, ([]byte(strEmailHdrCharsOnly(v)))...)
-		hdr = append(hdr, '\r', '\n')
-		if len(hdr) > maxLineLength {
-			continue
-		}
-
-		buf.WriteString(strEmailHdrCharsOnly(k))
-		buf.Write([]byte(": "))
-		buf.WriteString(strEmailHdrCharsOnly(v))
-		buf.Write([]byte(": "))
-		buf.Write([]byte("\r\n"))
+// https://datatracker.ietf.org/doc/html/rfc2822#section-2.2
+func AsHeader(name, w string) ([]byte, error) {
+	nClean := strEmailHdrCharsOnly(name)
+	if len(nClean) != len(name) {
+		return nil, errors.New("header name contains an invalid character")
 	}
 
-	return buf.Bytes()
+	bClean := strEmailHdrCharsOnly(w)
+	if len(bClean) != len(w) {
+		return nil, errors.New("header body contains an invalid character")
+	}
+
+	hdr := append([]byte(nClean), ':', ' ')
+	hdr = append(hdr, []byte(bClean)...)
+	hdr = append(hdr, '\r', '\n')
+	if len(hdr) > maxLineLength {
+		return nil, errors.New("header is too long")
+	}
+
+	return hdr, nil
+}
+
+// AsHeaders converts the map to an email header section
+func AsHeaders(hdrs map[string]string) ([]byte, error) {
+	result := make([]byte, 0, 4096)
+
+	i := 0
+	for k, v := range hdrs {
+		hdr, err := AsHeader(k, v)
+		if err != nil {
+			return nil, fmt.Errorf("converting header '%q: %q' failed: %w", k, v, err)
+		}
+
+		result = append(result, hdr...)
+		i++
+	}
+
+	return slices.Clip(result), nil
 }
 
 // AddHeaders inserts additional headers to the e-mail at [path].
@@ -66,7 +87,7 @@ func AddHeaders(path string, headers []byte) error {
 	}
 	defer emailFd.Close()
 
-	err = withHeaders(emailFd, tmpfileFd, headers)
+	err = addHeaders(emailFd, tmpfileFd, headers)
 	if err != nil {
 		_ = tmpfileFd.Close()
 		delErr := os.Remove(tmpfileFd.Name())
@@ -84,7 +105,9 @@ func AddHeaders(path string, headers []byte) error {
 	return os.Rename(tmpfileFd.Name(), path)
 }
 
-func withHeaders(in io.Reader, out io.Writer, hdrs []byte) error {
+// addHeaders reads an email from in, inserts the additional headers and writes
+// the result to out.
+func addHeaders(in io.Reader, out io.Writer, hdrs []byte) error {
 	emailBr := bufio.NewReader(in)
 	tmpfileBw := bufio.NewWriter(out)
 
@@ -93,7 +116,7 @@ func withHeaders(in io.Reader, out io.Writer, hdrs []byte) error {
 	for {
 		n, err := emailBr.Read(buf)
 		if err != nil {
-			if err == io.EOF {
+			if err == io.EOF { //nolint:errorlint // errors.Is unnecessary here
 				return errors.New("header end not found")
 			}
 			return fmt.Errorf("reading email failed: %w", err)
@@ -107,7 +130,10 @@ func withHeaders(in io.Reader, out io.Writer, hdrs []byte) error {
 				return fmt.Errorf("copying data failed: %w", err)
 			}
 
-			buf = buf[idx:n]
+			// +2 to skip the \r\n of the last header line, all
+			// lines in hdrs are already expected to be \r\n
+			// terminated
+			buf = buf[idx+2 : n]
 			break
 		}
 
@@ -135,7 +161,7 @@ func withHeaders(in io.Reader, out io.Writer, hdrs []byte) error {
 	}
 
 	if err := tmpfileBw.Flush(); err != nil {
-		return fmt.Errorf("flushing out buffer failed: %w", err)
+		return fmt.Errorf("flushing buffer failed: %w", err)
 	}
 
 	return nil
