@@ -3,19 +3,23 @@ package imap
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"slices"
+	"strconv"
 	"time"
 
+	"github.com/fho/rspamd-scan/internal/mail"
 	"github.com/fho/rspamd-scan/internal/rspamc"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
 )
+
+const hdrScanSymbolPrefix = "X-rspamd-iscan-"
 
 const defChanBufSiz = 32
 
@@ -31,9 +35,12 @@ type Client struct {
 	inboxMailbox      string
 	spamMailbox       string
 	hamMailbox        string
+	backupMailbox     string
 	undetectedMailbox string
-	statefilePath     string
 	spamTreshold      float32
+
+	tempDir       string
+	keepTempFiles bool
 
 	learnInterval time.Duration
 
@@ -50,11 +57,20 @@ type Config struct {
 	InboxMailbox          string
 	HamMailbox            string
 	SpamMailboxName       string
+	BackupMailboxName     string
+	TempDir               string
+	KeepTempFiles         bool
 	UndetectedMailboxName string
-	StateFilePath         string
 	SpamTreshold          float32
 	Logger                *slog.Logger
 	Rspamc                *rspamc.Client
+}
+
+type scannedMail struct {
+	Path        string
+	UID         imap.UID
+	Envelope    *imap.Envelope
+	CheckResult *rspamc.CheckResult
 }
 
 type learnFn func(context.Context, io.Reader) error
@@ -70,9 +86,11 @@ func NewClient(cfg *Config) (*Client, error) {
 		undetectedMailbox: cfg.UndetectedMailboxName,
 		eventCh:           make(chan eventNewMessages, defChanBufSiz),
 		rspamc:            cfg.Rspamc,
-		statefilePath:     cfg.StateFilePath,
 		spamTreshold:      cfg.SpamTreshold,
 		learnInterval:     30 * time.Minute,
+		backupMailbox:     cfg.BackupMailboxName,
+		tempDir:           cfg.TempDir,
+		keepTempFiles:     cfg.KeepTempFiles,
 	}
 
 	clt, err := imapclient.DialTLS(cfg.ServerAddr, &imapclient.Options{
@@ -143,60 +161,8 @@ func (c *Client) Monitor(mailbox string) (stop func() error, err error) {
 }
 
 type SeenStatus struct {
-	UIDValidity      uint32   `json:"uid_validity"`
-	UIDLastProcessed imap.UID `json:"uid_last_processed"`
-}
-
-type state struct {
-	Seen map[string]*SeenStatus `json:"seen"`
-}
-
-func (s *state) ToFile(path string) error {
-	buf, err := json.Marshal(s)
-	if err != nil {
-		return err
-	}
-	err = os.WriteFile(path, buf, 0o640)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *Client) loadOrCreateState() (*state, error) {
-	logger := c.logger.With("statefile", c.statefilePath)
-
-	buf, err := os.ReadFile(c.statefilePath)
-	if os.IsNotExist(err) {
-		logger.Info("state file does not exist, all mails will be scanned")
-		return &state{
-			Seen: map[string]*SeenStatus{
-				c.scanMailbox: {}, c.hamMailbox: {},
-			},
-		}, nil
-	}
-
-	var result state
-	err = json.Unmarshal(buf, &result)
-	if err != nil {
-		logger.Error("unmarshaling state file failed, file might be corrupted", "error", err)
-		return nil, err
-	}
-	c.logger.Info("state loaded from file")
-
-	if result.Seen == nil {
-		result.Seen = map[string]*SeenStatus{}
-	}
-
-	if _, exists := result.Seen[c.hamMailbox]; !exists {
-		result.Seen[c.hamMailbox] = &SeenStatus{}
-	}
-
-	if _, exists := result.Seen[c.scanMailbox]; !exists {
-		result.Seen[c.scanMailbox] = &SeenStatus{}
-	}
-
-	return &result, nil
+	UIDValidity      uint32
+	UIDLastProcessed imap.UID
 }
 
 func (c *Client) ProcessHam() error {
@@ -220,7 +186,7 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 
 	logger.Debug("checking for new messages")
 
-	mbox, err := c.clt.Select(srcMailbox, &imap.SelectOptions{ReadOnly: true}).Wait()
+	mbox, err := c.clt.Select(srcMailbox, &imap.SelectOptions{}).Wait()
 	if err != nil {
 		return err
 	}
@@ -238,7 +204,7 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 	fetchCmd := c.clt.Fetch(n, &imap.FetchOptions{
 		Envelope:    true,
 		UID:         true,
-		BodySection: []*imap.FetchItemBodySection{{}},
+		BodySection: []*imap.FetchItemBodySection{{Peek: true}},
 	})
 	defer fetchCmd.Close()
 
@@ -305,12 +271,275 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 	return nil
 }
 
+func (c *Client) downloadMsg(msgData *imapclient.FetchMessageData, w io.Writer) (imap.UID, *imap.Envelope, error) {
+	var envelope *imap.Envelope
+	var bodyWritten bool
+	var uid imap.UID
+
+	for i := 0; ; i++ {
+		item := msgData.Next()
+		if item == nil {
+			if envelope == nil {
+				return 0, nil, errors.New("envelope is missing")
+			}
+
+			if !bodyWritten {
+				return 0, nil, errors.New("message data is missing")
+			}
+
+			if uid == 0 {
+				return 0, nil, errors.New("uid is missing")
+			}
+
+			return uid, envelope, nil
+		}
+
+		if i > 2 {
+			return 0, nil, errors.New("expected 3 message items, got >3")
+		}
+
+		switch item := item.(type) {
+		case imapclient.FetchItemDataUID:
+			uid = item.UID
+
+		case imapclient.FetchItemDataBodySection:
+			if item.Literal == nil {
+				return 0, nil, errors.New("message data reader is nil")
+			}
+
+			if item.Literal.Size() == 0 {
+				return 0, nil, errors.New("message data reader is empty")
+			}
+
+			_, err := io.Copy(w, item.Literal)
+			if err != nil {
+				return 0, nil, fmt.Errorf("copying message from server to disk failed: %w", err)
+			}
+
+			bodyWritten = true
+
+		case imapclient.FetchItemDataEnvelope:
+			if item.Envelope == nil {
+				return 0, nil, errors.New("envelope is nil")
+			}
+
+			envelope = item.Envelope
+		default:
+			return 0, nil, fmt.Errorf("message data has unexpected type: %T", item)
+		}
+	}
+}
+
+func toHdrMap(prefix string, scores map[string]*rspamc.Symbol, skipZeroScore bool) map[string]string {
+	result := make(map[string]string, len(scores))
+
+	for _, v := range scores {
+		if skipZeroScore && v.Score == 0 {
+			continue
+		}
+
+		// map key is the same as v.Name
+		result[prefix+v.Name] = fmt.Sprint(v.Score)
+	}
+
+	return result
+}
+
+func addScanResultHeaders(mailFilepath string, result *rspamc.CheckResult) error {
+	var hdrsData []byte
+
+	hdrs := toHdrMap(hdrScanSymbolPrefix+"Symbol-", result.Symbols, true)
+	hdrs[hdrScanSymbolPrefix+"Score"] = fmt.Sprint(result.Score)
+
+	// TODO: instead of adding a header line per symbol, add a multiline
+	// header with all symbols
+	hdrsData, err := mail.AsHeaders(hdrs)
+	if err != nil {
+		return err
+	}
+
+	return mail.AddHeaders(mailFilepath, hdrsData)
+}
+
+func (c *Client) isSpam(r *rspamc.CheckResult) bool {
+	return r.Score >= c.spamTreshold
+}
+
+// replaceWithModifiedMails uploads mails to the spam or inbox mailbox, depending on their
+// spam score.
+// The original email is moved to the backup mailbox.
+// It returns an UIDSet of all successfully uploaded mails.
+// When errors happen, an error **and** a non-empty UIDSet can be returned.
+func (c *Client) replaceWithModifiedMails(mails []*scannedMail) (imap.UIDSet, error) {
+	var processed imap.UIDSet
+	var errs []error
+
+	for _, mail := range mails {
+		var mbox string
+
+		logger := c.logger.With(
+			"mail.subject", mail.Envelope.Subject,
+			"mail.uid", mail.UID,
+			"filepath", mail.Path,
+		)
+
+		// TODO: support deleting emails from the mailbox, when backupMailbox is
+		// empty instead of keeping a copy of the original, deleting
+		// must happen after appendMail!
+		uidOrg := imap.UIDSetNum(mail.UID)
+		_, err := c.clt.Move(uidOrg, c.backupMailbox).Wait()
+		if err != nil {
+			errs = append(errs, fmt.Errorf(
+				"moving mail (%d) (%s) to backup mailbox %s failed: %w",
+				mail.UID, mail.Envelope.Subject, c.backupMailbox, err,
+			))
+
+			continue
+		}
+
+		logger.Debug("moved mail to backup mailbox", "mailbox", c.backupMailbox)
+
+		if c.isSpam(mail.CheckResult) {
+			mbox = c.spamMailbox
+		} else {
+			mbox = c.inboxMailbox
+		}
+
+		err = c.appendMail(mail.Path, mbox, mail.Envelope.Date)
+		if err != nil {
+			errs = append(errs, fmt.Errorf(
+				"uploading email %q (%s) (%s) to %s failed: %w",
+				mail.UID, mail.Envelope.Subject, mail.Path, mbox, err,
+			))
+			logger.Warn("uploading scanned email to inbox failed, please find the original email in the backup mailbox!")
+
+			continue
+		}
+
+		logger.Debug("uploaded modified mail with scan result", "mailbox", mbox)
+
+		processed.AddNum(mail.UID)
+
+		if !c.keepTempFiles {
+			if err := os.Remove(mail.Path); err != nil {
+				logger.Warn(
+					"deleting email file failed",
+					"error", err,
+				)
+			}
+		}
+	}
+
+	return processed, errors.Join(errs...)
+}
+
+func (c *Client) appendMail(path, mailbox string, ts time.Time) error {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+
+	appendCmd := c.clt.Append(mailbox, fi.Size(), &imap.AppendOptions{Time: ts})
+
+	fd, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer fd.Close()
+
+	_, err = io.Copy(appendCmd, fd)
+	if err != nil {
+		return fmt.Errorf("uploading mail to imap mailbox failed: %w", err)
+	}
+
+	err = appendCmd.Close()
+	if err != nil {
+		return fmt.Errorf("uploading mail to imap mailbox failed: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Client) downloadAndScan(msgData *imapclient.FetchMessageData) (*scannedMail, error) {
+	tmpFile, err := os.CreateTemp(
+		c.tempDir,
+		"rspamd-iscan-mail-"+strconv.Itoa(int(msgData.SeqNum)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("creating temporary file failed: %w", err)
+	}
+
+	errCleanupfn := func() {
+		_ = tmpFile.Close()
+
+		if c.keepTempFiles {
+			return
+		}
+
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			c.logger.Error("deleting temporary file failed",
+				"error", err, "path", tmpFile.Name())
+		}
+	}
+
+	uid, env, err := c.downloadMsg(msgData, tmpFile)
+	if err != nil {
+		errCleanupfn()
+		return nil, fmt.Errorf("downloading imap message to disk failed: %w", err)
+	}
+
+	logger := c.logger.With("mail.subject", env.Subject, "mail.uid", uid)
+	logger.Debug("downloaded imap message",
+		"path", tmpFile.Name(),
+		"mail.Envelope.MessageID", env.MessageID,
+		"mail.Envelope.From", env.From,
+		"mail.Envelope.To", env.To,
+	)
+
+	_, err = tmpFile.Seek(0, 0)
+	if err != nil {
+		errCleanupfn()
+		return nil, fmt.Errorf("setting %q file position to beginning failed: %w", tmpFile.Name(), err)
+	}
+
+	// TODO: retry Check if it failed with a temporary error
+	scanResult, err := c.rspamc.Check(context.Background(), tmpFile)
+	if err != nil {
+		errCleanupfn()
+		return nil, err
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		errCleanupfn()
+		return nil, fmt.Errorf("closing file of downloaded mail failed: %w", err)
+	}
+
+	err = addScanResultHeaders(tmpFile.Name(), scanResult)
+	if err != nil {
+		return nil, fmt.Errorf("adding scan result headers to local mail copy failed: %w", err)
+	}
+
+	logger.Debug("message scanned",
+		"scan.score", scanResult.Score, "scan.IsSpam", c.isSpam(scanResult),
+	)
+
+	return &scannedMail{
+		Path:        tmpFile.Name(),
+		UID:         uid,
+		Envelope:    env,
+		CheckResult: scanResult,
+	}, nil
+}
+
 func (c *Client) ProcessScanBox(startStatus *SeenStatus) (*SeenStatus, error) {
+	var scannedMails []*scannedMail
+	var errs []error
+
 	status := *startStatus
 
 	logger := c.logger.With("mailbox.source", c.scanMailbox)
 
-	mbox, err := c.clt.Select(c.scanMailbox, &imap.SelectOptions{ReadOnly: true}).Wait()
+	mbox, err := c.clt.Select(c.scanMailbox, &imap.SelectOptions{}).Wait()
 	if err != nil {
 		return startStatus, err
 	}
@@ -344,124 +573,68 @@ func (c *Client) ProcessScanBox(startStatus *SeenStatus) (*SeenStatus, error) {
 	numSet.AddRange(status.UIDLastProcessed+1, 0)
 
 	fetchCmd := c.clt.Fetch(numSet, &imap.FetchOptions{
-		Envelope: true,
-		BodySection: []*imap.FetchItemBodySection{
-			{},
-		},
+		Envelope:    true,
+		BodySection: []*imap.FetchItemBodySection{{Peek: true}},
+		UID:         true,
 	})
 	defer fetchCmd.Close()
 
-	inboxSeqSet := imap.UIDSet{}
-	spamSeqSet := imap.UIDSet{}
-
-	var errs []error
 	for {
 		msgData := fetchCmd.Next()
 		if msgData == nil {
 			break
 		}
 
-		msg, err := msgData.Collect()
+		sm, err := c.downloadAndScan(msgData)
 		if err != nil {
-			return &status, err
+			// TODO: abort on local tmpfile errors immediately,
+			// unlikely that the following mail won't encounter the
+			// same issue
+			errs = append(errs, err)
+			continue
 		}
-		if msg.Envelope == nil {
-			return startStatus, errors.New("msg.Envelope is nil")
-		}
-
-		if msg.UID == 0 {
-			return startStatus, errors.New("msg UID is nil")
-		}
-
-		logger := c.logger.With("mail.subject", msg.Envelope.Subject, "mail.uid", msg.UID)
-		logger.Debug("fetched message")
-
-		if len(msg.BodySection) != 1 {
-			return startStatus, fmt.Errorf("msg has %d body sections, expecting 1", len(msg.BodySection))
-		}
-		var txt []byte
-		for _, b := range msg.BodySection {
-			txt = b.Bytes
-			break
-		}
-		if txt == nil {
-			return startStatus, errors.New("body is nil")
-		}
-		if len(txt) == 0 {
-			return startStatus, errors.New("body is empty")
-		}
-
-		// TODO: retry Check if it failed with an temporary error
-		scanResult, err := c.rspamc.Check(context.Background(), bytes.NewReader(txt))
-		if err != nil {
-			// TODO: if an error happens, try to move the ones that
-			// we already scanned
-			return startStatus, err
-		}
-		logger = logger.With("scan.result", scanResult.Action, "scan.score", scanResult.Score, "scan.skipped", scanResult.IsSkipped)
-		logger.Debug("message scanned", "scan.symbols", scanResult.Symbols)
-
-		switch v := scanResult.Score; {
-		case v >= c.spamTreshold:
-			spamSeqSet.AddNum(msg.UID)
-		default:
-			inboxSeqSet.AddNum(msg.UID)
-		}
-
-		if msg.UID > status.UIDLastProcessed {
-			status.UIDLastProcessed = msg.UID
-		}
+		scannedMails = append(scannedMails, sm)
 	}
 
 	err = fetchCmd.Close()
 	if err != nil {
-		return startStatus, err
+		return startStatus, errors.Join(append(errs, err)...)
 	}
 
-	if len(inboxSeqSet) > 0 {
-		_, err = c.clt.Move(inboxSeqSet, c.inboxMailbox).Wait()
-		if err != nil {
-			errs = append(errs, fmt.Errorf("moving message to inbox mailbox failed: %w", err))
-		} else {
-			logger.Info("moved messages to inbox", "mailbox.destination", c.inboxMailbox)
-		}
+	processedMails, err := c.replaceWithModifiedMails(scannedMails)
+	if err != nil {
+		errs = append(errs, err)
 	}
 
-	if len(spamSeqSet) > 0 {
-		_, err = c.clt.Move(spamSeqSet, c.spamMailbox).Wait()
-		if err != nil {
-			errs = append(errs, fmt.Errorf("moving message to spam mailbox failed: %w", err))
-		} else {
-			logger.Info("moved messages to spam mailbox", "mailbox.spam", c.spamMailbox)
-		}
+	if len(processedMails) == 0 {
+		return &status, errors.Join(errs...)
 	}
 
-	if err := errors.Join(errs...); err != nil {
-		// we did not keep track of which mails were processed
-		// successfully and which wasn't, return startStatus to ensure
-		// the failed ones are processed again
-		return startStatus, err
+	lastProcessed, err := maxUID(processedMails)
+	if err != nil {
+		return &status, errors.Join(append(errs, fmt.Errorf("evaluating uid of last successfully processed mail failed: %w", err))...)
 	}
 
-	return &status, nil
+	if lastProcessed > status.UIDLastProcessed {
+		status.UIDLastProcessed = lastProcessed
+	}
+
+	return &status, errors.Join(errs...)
 }
 
-func (c *Client) writeStateFile(s *state) error {
-	err := s.ToFile(c.statefilePath)
-	if err != nil {
-		return err
+func maxUID(s imap.UIDSet) (imap.UID, error) {
+	uids, ok := s.Nums()
+	if !ok {
+		return 0, errors.New("getting all uids from set failed")
 	}
-	c.logger.Info("wrote state to file", "statefile", c.statefilePath)
-	return nil
+
+	return slices.Max(uids), nil
 }
 
 func (c *Client) Run() error {
-	lastSeen, err := c.loadOrCreateState()
-	if err != nil {
-		return err
-	}
+	lastSeen := &SeenStatus{}
 
-	err = c.ProcessHam()
+	err := c.ProcessHam()
 	if err != nil {
 		return fmt.Errorf("learning ham failed: %w", err)
 	}
@@ -471,14 +644,11 @@ func (c *Client) Run() error {
 		return fmt.Errorf("learning spam failed: %w", err)
 	}
 
-	seen, err := c.ProcessScanBox(lastSeen.Seen[c.scanMailbox])
-	lastSeen.Seen[c.scanMailbox] = seen
-	if err := c.writeStateFile(lastSeen); err != nil {
-		return fmt.Errorf("writing state file failed: %w", err)
-	}
+	seen, err := c.ProcessScanBox(lastSeen)
 	if err != nil {
 		return err
 	}
+	lastSeen = seen
 
 	monitorCancelFn, err := c.Monitor(c.scanMailbox)
 	if err != nil {
@@ -500,17 +670,12 @@ func (c *Client) Run() error {
 			if err := monitorCancelFn(); err != nil {
 				return WrapRetryableError(err)
 			}
-			seen, err := c.ProcessScanBox(lastSeen.Seen[c.scanMailbox])
-			lastSeen.Seen[c.scanMailbox] = seen
-			// TODO: ProcessScanBox returns early, and returns
-			// lastSeen if there is nothing to do, do not write the
-			// file unnecessarily.
-			if err := c.writeStateFile(lastSeen); err != nil {
-				return fmt.Errorf("writing state file failed: %w", err)
-			}
+
+			seen, err := c.ProcessScanBox(lastSeen)
 			if err != nil {
 				return err
 			}
+			lastSeen = seen
 
 			if time.Since(lastLearn) >= c.learnInterval {
 				if err := c.ProcessHam(); err != nil {
@@ -555,17 +720,11 @@ func (c *Client) Run() error {
 				continue
 			}
 
-			seen, err := c.ProcessScanBox(lastSeen.Seen[c.scanMailbox])
-			lastSeen.Seen[c.scanMailbox] = seen
-			// TODO: ProcessScanBox returns early, and returns
-			// lastSeen if there is nothing to do, do not write the
-			// file unnecessarily.
-			if err := c.writeStateFile(lastSeen); err != nil {
-				return fmt.Errorf("writing state file failed: %w", err)
-			}
+			seen, err := c.ProcessScanBox(lastSeen)
 			if err != nil {
 				return err
 			}
+			lastSeen = seen
 
 			monitorCancelFn, err = c.Monitor(c.scanMailbox)
 			if err != nil {
