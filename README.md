@@ -32,8 +32,12 @@ InboxMailbox        = "INBOX"
 SpamMailbox         = "Spam"
 HamMailbox          = "Ham"
 UndetectedMailbox   = "Undetected"
+BackupMailbox       = "Backup"
+TempDir             = "/tmp"
+KeepTempFiles       = true
 ScanMailbox         = "Unscanned"
 SpamThreshold       = 10.0
+
 ```
 
 The location of the configuration and state file can be specified via command
