@@ -636,17 +636,17 @@ func (c *Client) Run() error {
 
 	err := c.ProcessHam()
 	if err != nil {
-		return fmt.Errorf("learning ham failed: %w", err)
+		return fmt.Errorf("learning ham failed: %w", WrapRetryableError(err))
 	}
 
 	err = c.ProcessSpam()
 	if err != nil {
-		return fmt.Errorf("learning spam failed: %w", err)
+		return fmt.Errorf("learning spam failed: %w", WrapRetryableError(err))
 	}
 
 	seen, err := c.ProcessScanBox(lastSeen)
 	if err != nil {
-		return err
+		return WrapRetryableError(err)
 	}
 	lastSeen = seen
 
@@ -673,17 +673,17 @@ func (c *Client) Run() error {
 
 			seen, err := c.ProcessScanBox(lastSeen)
 			if err != nil {
-				return err
+				return WrapRetryableError(err)
 			}
 			lastSeen = seen
 
 			if time.Since(lastLearn) >= c.learnInterval {
 				if err := c.ProcessHam(); err != nil {
-					return err
+					return WrapRetryableError(err)
 				}
 
 				if err := c.ProcessSpam(); err != nil {
-					return err
+					return WrapRetryableError(err)
 				}
 
 				lastLearn = time.Now()
@@ -707,7 +707,7 @@ func (c *Client) Run() error {
 
 			if time.Since(lastLearn) >= c.learnInterval {
 				if err := c.ProcessHam(); err != nil {
-					return err
+					return WrapRetryableError(err)
 				}
 				lastLearn = time.Now()
 			}
@@ -722,7 +722,7 @@ func (c *Client) Run() error {
 
 			seen, err := c.ProcessScanBox(lastSeen)
 			if err != nil {
-				return err
+				return WrapRetryableError(err)
 			}
 			lastSeen = seen
 

@@ -34,7 +34,7 @@ func WrapRetryableError(err error) error {
 		if ne.Temporary() {
 			return &ErrRetryable{err: err}
 		}
-		slog.Debug("NOT A TEMPORARY ERR", "error", ne.Error())
+		slog.Debug("errRetryable: not a temporary error: ", "error", ne.Error())
 	}
 
 	return err
