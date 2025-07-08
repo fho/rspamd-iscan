@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/fho/rspamd-scan/internal/config"
-	"github.com/fho/rspamd-scan/internal/imap"
-	"github.com/fho/rspamd-scan/internal/rspamc"
+	"github.com/fho/rspamd-iscan/internal/config"
+	"github.com/fho/rspamd-iscan/internal/imap"
+	"github.com/fho/rspamd-iscan/internal/rspamc"
 
 	flag "github.com/spf13/pflag"
 )

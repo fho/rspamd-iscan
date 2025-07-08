@@ -1,4 +1,4 @@
-module github.com/fho/rspamd-scan
+module github.com/fho/rspamd-iscan
 
 go 1.24.4
 

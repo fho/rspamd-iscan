@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/fho/rspamd-scan/internal/mail"
-	"github.com/fho/rspamd-scan/internal/rspamc"
+	"github.com/fho/rspamd-iscan/internal/mail"
+	"github.com/fho/rspamd-iscan/internal/rspamc"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
