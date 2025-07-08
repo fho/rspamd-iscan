@@ -1,29 +1,70 @@
 # rspamd-iscan
 
-rspamd-iscan is a daemon that monitors IMAP mailboxes and forwards new mails to
-[rspamd](https://rspamd.com) for spam analysis or ham classification.
+rspamd-iscan is a daemon that monitors IMAP mailboxes and sends new mails to
+[rspamd](https://rspamd.com) for spam analysis and training.
+It decouples spam filtering from mail delivery - allowing the MDA,
+rspamd and rspamd-iscan to run on totally different hosts.
+For example, you can filter mails on the IMAP server of your third-party
+provider with your self-hosted rspamd instance.
 It is similar to [isbg](https://gitlab.com/isbg/isbg) but uses rspamd instead of
 Spamassassin.
 
-rspamd-iscan scans new mails arriving in a _ScanMailbox_. The scan result is
-added as headers to the e-mail and the modified mail either uploaded to
-the _SpamMailbox_ or the _InboxMailbox_, depending on the classification.
-The unmodified original email is moved from the _ScanMailbox_ to the
-_BackupMailbox_.
-The _ScanMailBox_ is monitored via IMAP IDLE for new E-Mails and additionally
-also scanned periodically. \
-Mails in _HamMailbox_ and _UndetectedMailbox_ are processed periodically and fed
-to rspamd to be learned as Ham/Spam.
-Mails that have been learned as Ham are moved to _InboxMailbox_, learned Spam
-mails are moved to _SpamMailbox_.
+rspamd-iscan continuously monitors the IMAP `ScanMailbox` for new mails with
+_IMAP IDLE_. \
+When a new mail arrives, it is sent to rspamd's HTTP interface for
+scanning. The scan result is added as headers to the e-mail and the modified
+mail is uploaded to either the `SpamMailbox` or the `InboxMailbox`, depending on
+its classification. \
+The unmodified original mail is moved from the `ScanMailbox` to the
+`BackupMailbox`.
 
-The UID of the last scanned mail from _InboxMailbox_ is stored in a state file.
-This allows to use the same mailbox as _InboxMailbox_ and _ScanMailBox_.
+Mails in the `HamMailbox` and `UndetectedMailbox` are periodically processed and
+submitted to rspamd to be learned as ham or spam. Mails learned as ham are
+moved to `InboxMailbox`, learned Spam mails are moved to `SpamMailbox`.
+
+## Installation
+
+### From Binaries
+
+Download and extract the binary from a [Release](https://github.com/fho/rspamd-iscan/releases).
+
+### From Source
+
+`go install github.com/fho/rspamd-iscan@latest`
 
 ## Configuration
 
-rspamd-iscan can be configured via a TOML configuration file.
-Example:
+### Rspamd
+
+A rspamd instance must have been set up and it's controller HTTP interface must
+be reachable.
+
+### IMAP Server
+
+It is recommended to use your `INBOX` mailbox to store scanned HAM mails and
+reconfigure your mail-server to store new incoming mails in another mailbox,
+e.g. named `Unprocessed`. This does not require changing your mail-clients'
+configuration .
+If that is not possible, rspamd-iscan can monitor `INBOX` instead and move
+filtered Ham mails to another mailbox (e.g. named `Scanned`).
+Your mail-clients would then be configured to use `HAM` as inbox.
+
+- Ensure that you have the following mailboxes created on your IMAP server:
+  - One to store mails classified as Spam (`SpamMailbox`),
+  - One to store mails classified as Spam that was not detected
+    (`UndetectedMailbox`),
+  - One to store mails that have been wrongly classified as Spam (`HamMailbox`),
+  - One to store unprocessed new mails (`ScanMailbox`),
+  - One to store scanned mails classified as HAM (`InboxMailbox`)
+
+### rspamd-iscan
+
+rspamd-iscan is configured via a TOML configuration file.
+By default it is read from `/etc/rspamd-iscan/config.toml`, another location
+can be specified by the `--cfg-file` command line parameter.
+
+Create a new configuration file with the following content and adapt it to your
+setup:
 
 ```toml
 RspamdURL           = "http://192.168.178.2:11334"
@@ -36,17 +77,30 @@ SpamMailbox         = "Spam"
 HamMailbox          = "Ham"
 UndetectedMailbox   = "Undetected"
 BackupMailbox       = "Backup"
+# TempDir stores downloaded mails and their modified variants with added spam
+# headers
 TempDir             = "/tmp"
+# Set KeepTempFiles to false to delete temporary files after use immediately
 KeepTempFiles       = true
 ScanMailbox         = "Unscanned"
+# Mails with a higher or equal rspamd score than SpamThreshold are moved to
+# SpamMailbox, others to HamMailbox
 SpamThreshold       = 10.0
-
 ```
 
-The location of the configuration and state file can be specified via command
-line parameters.
+## Running
+
+```bash
+rspamd-iscan --cfg-file /etc/rspamd-iscan/config.toml 
+```
+
+better run it via systemd though :-)
 
 ## Project Status
 
 The application is work-in-progress, the documented functionality works and is
-in-use.
+in use, tests are missing.
+
+## License
+
+[EUPL](LICENSE)
