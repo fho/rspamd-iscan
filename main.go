@@ -19,7 +19,7 @@ var (
 )
 
 func main() {
-	cfgPath := flag.String("cfg-file", "rspamd-iscan.toml", "Path to the rspamd-iscan config file")
+	cfgPath := flag.String("cfg-file", "/etc/rspamd-iscan/config.toml", "Path to the rspamd-iscan config file")
 	printVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 
