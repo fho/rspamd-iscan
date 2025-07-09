@@ -93,7 +93,7 @@ func NewClient(cfg *Config) (*Client, error) {
 		keepTempFiles:     cfg.KeepTempFiles,
 	}
 
-	clt, err := imapclient.DialTLS(cfg.ServerAddr, &imapclient.Options{
+	clt, err := c.dial(cfg.ServerAddr, &imapclient.Options{
 		UnilateralDataHandler: &imapclient.UnilateralDataHandler{
 			Mailbox: c.mailboxUpdateHandler,
 		},
@@ -102,13 +102,14 @@ func NewClient(cfg *Config) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.clt = clt
 
 	if err := clt.Login(cfg.User, cfg.Passwd).Wait(); err != nil {
 		return nil, err
 	}
 
-	logger.Debug("connection established")
+	logger.Debug("connecting established, authentication succeeded")
+
+	c.clt = clt
 
 	return c, nil
 }
