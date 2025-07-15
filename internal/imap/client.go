@@ -76,7 +76,7 @@ type scannedMail struct {
 type learnFn func(context.Context, io.Reader) error
 
 func NewClient(cfg *Config) (*Client, error) {
-	logger := cfg.Logger.WithGroup("imap").With("server", cfg.ServerAddr)
+	logger := cfg.Logger.WithGroup("imap")
 	c := &Client{
 		logger:            logger,
 		inboxMailbox:      cfg.InboxMailbox,
@@ -107,7 +107,8 @@ func NewClient(cfg *Config) (*Client, error) {
 		return nil, err
 	}
 
-	logger.Debug("connecting established, authentication succeeded")
+	logger.Info("connection established, authentication succeeded",
+		"event", "imap.connection_established")
 
 	c.clt = clt
 
@@ -249,10 +250,11 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 		// TODO: retry Check if it failed with a temporary error
 		err = learnFn(context.TODO(), bytes.NewReader(txt))
 		if err != nil {
-			logger.Warn("learning message failed", "error", err)
+			logger.Warn("learning message failed", "error", err,
+				"event", "rspamd.msg_learn_failed")
 			return nil
 		}
-		logger.Info("learned message")
+		logger.Info("learned message", "event", "rspamd.msg_learned")
 		learnedSet.AddNum(msg.UID)
 	}
 
@@ -267,7 +269,7 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 		return fmt.Errorf("moving messages after learning successfully failed: %w", err)
 	}
 
-	logger.Info("moved messages", "mailbox.destination", destMailbox)
+	logger.Info("moved messages", "mailbox.destination", destMailbox, "event", "imap.msg_moved")
 
 	return nil
 }
@@ -412,7 +414,10 @@ func (c *Client) replaceWithModifiedMails(mails []*scannedMail) (imap.UIDSet, er
 				"uploading email %q (%s) (%s) to %s failed: %w",
 				mail.UID, mail.Envelope.Subject, mail.Path, mbox, err,
 			))
-			logger.Warn("uploading scanned email to inbox failed, please find the original email in the backup mailbox!")
+			logger.Warn(
+				"uploading scanned email to inbox failed, please find the original email in the backup mailbox!",
+				"event", "imap.msg_append_failed",
+			)
 
 			continue
 		}
@@ -426,6 +431,7 @@ func (c *Client) replaceWithModifiedMails(mails []*scannedMail) (imap.UIDSet, er
 				logger.Warn(
 					"deleting email file failed",
 					"error", err,
+					"event", "imap.msg_delete_failed",
 				)
 			}
 		}
@@ -479,7 +485,8 @@ func (c *Client) downloadAndScan(msgData *imapclient.FetchMessageData) (*scanned
 
 		if err := os.Remove(tmpFile.Name()); err != nil {
 			c.logger.Error("deleting temporary file failed",
-				"error", err, "path", tmpFile.Name())
+				"error", err, "path", tmpFile.Name(),
+				"event", "file.deletion_failed")
 		}
 	}
 
@@ -717,7 +724,7 @@ func (c *Client) Run() error {
 			// instead of processing all sequentially, fetch
 			// all and only call ProcessScanBox 1x
 			if evA.NewMsgCount == 0 {
-				c.logger.Info("ignoring MailboxUpdate, no new messages")
+				c.logger.Debug("ignoring MailboxUpdate, no new messages")
 				continue
 			}
 

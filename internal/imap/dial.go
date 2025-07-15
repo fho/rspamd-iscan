@@ -20,12 +20,14 @@ func (c *Client) dial(address string, opts *imapclient.Options) (*imapclient.Cli
 		Timeout: dialTimeout,
 	}
 
+	logger := c.logger.With("server", address).With("timeout", dialTimeout)
+
 	if port == "993" || port == "imaps" {
-		c.logger.Debug("connecting to imap server", "timeout", dialTimeout, "tlsmode", "implicit")
+		logger.Debug("connecting to imap server", "tlsmode", "implicit")
 		return dialImplicitTLS(&dialer, address, opts)
 	}
 
-	c.logger.Debug("connecting to imap server", "timeout", dialTimeout, "tlsmode", "explicit")
+	logger.Debug("connecting to imap server", "tlsmode", "explicit")
 	return dialExplicitTLS(&dialer, address, host, opts)
 }
 
