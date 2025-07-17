@@ -1,17 +1,17 @@
 # rspamd-iscan
 
 rspamd-iscan is a daemon that monitors IMAP mailboxes and sends new mails to
-[rspamd](https://rspamd.com) for spam analysis and training.
+[Rspamd](https://rspamd.com) for spam analysis and training.
 It decouples spam filtering from mail delivery - allowing the MDA,
-rspamd and rspamd-iscan to run on totally different hosts.
+Rspamd and rspamd-iscan to run on totally different hosts.
 For example, you can filter mails on the IMAP server of your third-party
-provider with your self-hosted rspamd instance.
-It is similar to [isbg](https://gitlab.com/isbg/isbg) but uses rspamd instead of
-Spamassassin.
+provider with your self-hosted Rspamd instance.
+It is similar to [isbg](https://gitlab.com/isbg/isbg) but uses Rspamd instead of
+SpamAssassin.
 
 rspamd-iscan continuously monitors the IMAP `ScanMailbox` for new mails with
 _IMAP IDLE_. \
-When a new mail arrives, it is sent to rspamd's HTTP interface for
+When a new mail arrives, it is sent to Rspamd's HTTP interface for
 scanning. The scan result is added as headers to the e-mail and the modified
 mail is uploaded to either the `SpamMailbox` or the `InboxMailbox`, depending on
 its classification. \
@@ -19,7 +19,7 @@ The unmodified original mail is moved from the `ScanMailbox` to the
 `BackupMailbox`.
 
 Mails in the `HamMailbox` and `UndetectedMailbox` are periodically processed and
-submitted to rspamd to be learned as ham or spam. Mails learned as ham are
+submitted to Rspamd to be learned as ham or spam. Mails learned as ham are
 moved to `InboxMailbox`, learned Spam mails are moved to `SpamMailbox`.
 
 ## Installation
@@ -36,7 +36,7 @@ Download and extract the binary from a [Release](https://github.com/fho/rspamd-i
 
 ### Rspamd
 
-A rspamd instance must have been set up and it's controller HTTP interface must
+A Rspamd instance must have been set up and it's controller HTTP interface must
 be reachable.
 
 ### IMAP Server
@@ -44,7 +44,7 @@ be reachable.
 It is recommended to use your `INBOX` mailbox to store scanned HAM mails and
 reconfigure your mail-server to store new incoming mails in another mailbox,
 e.g. named `Unprocessed`. This does not require changing your mail-clients'
-configuration .
+configuration.
 If that is not possible, rspamd-iscan can monitor `INBOX` instead and move
 filtered Ham mails to another mailbox (e.g. named `Scanned`).
 Your mail-clients would then be configured to use `HAM` as inbox.
@@ -60,7 +60,7 @@ Your mail-clients would then be configured to use `HAM` as inbox.
 ### rspamd-iscan
 
 rspamd-iscan is configured via a TOML configuration file.
-By default it is read from `/etc/rspamd-iscan/config.toml`, another location
+By default, it is read from `/etc/rspamd-iscan/config.toml`, another location
 can be specified by the `--cfg-file` command line parameter.
 
 Create a new configuration file with the following content and adapt it to your
