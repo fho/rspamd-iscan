@@ -27,13 +27,14 @@ func New(logger *slog.Logger, url, password string) *Client {
 	}
 }
 
-func (c *Client) sendRequest(ctx context.Context, url string, msg io.Reader, result any) error {
+func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, msg io.Reader, result any) error {
 	logger := c.logger.With("url", url)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, msg)
 	if err != nil {
 		return nil
 	}
 
+	req.Header = hdrs.Clone()
 	req.Header.Add("password", c.password)
 
 	// TODO: use custom client with configured timeouts
@@ -81,25 +82,25 @@ func (c *Client) sendRequest(ctx context.Context, url string, msg io.Reader, res
 	return nil
 }
 
-func (c *Client) Check(ctx context.Context, msg io.Reader) (*CheckResult, error) {
+func (c *Client) Check(ctx context.Context, msg io.Reader, hdrs *MailHeaders) (*CheckResult, error) {
 	var result CheckResult
 	// wrap in NopCloser to prevent that http.NewRequest closes the reader,
 	// it is not responsible for closing it, the caller is
-	err := c.sendRequest(ctx, c.checkURL, io.NopCloser(msg), &result)
+	err := c.sendRequest(ctx, c.checkURL, hdrs.asHeader(), io.NopCloser(msg), &result)
 	if err != nil {
 		return nil, err
 	}
 	return &result, err
 }
 
-func (c *Client) Ham(ctx context.Context, msg io.Reader) error {
+func (c *Client) Ham(ctx context.Context, msg io.Reader, hdrs *MailHeaders) error {
 	// resp code 208 == already learned, returns a json with an "error"
 	// field
-	return c.sendRequest(ctx, c.hamURL, msg, nil)
+	return c.sendRequest(ctx, c.hamURL, nil, msg, hdrs)
 }
 
-func (c *Client) Spam(ctx context.Context, msg io.Reader) error {
-	return c.sendRequest(ctx, c.spamURL, msg, nil)
+func (c *Client) Spam(ctx context.Context, msg io.Reader, hdrs *MailHeaders) error {
+	return c.sendRequest(ctx, c.spamURL, nil, msg, hdrs)
 }
 
 type CheckResult struct {
