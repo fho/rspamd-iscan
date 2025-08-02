@@ -73,7 +73,7 @@ type scannedMail struct {
 	CheckResult *rspamc.CheckResult
 }
 
-type learnFn func(context.Context, io.Reader) error
+type learnFn func(context.Context, io.Reader, *rspamc.MailHeaders) error
 
 func NewClient(cfg *Config) (*Client, error) {
 	logger := cfg.Logger.WithGroup("imap")
@@ -248,7 +248,7 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 		}
 
 		// TODO: retry Check if it failed with a temporary error
-		err = learnFn(context.TODO(), bytes.NewReader(txt))
+		err = learnFn(context.TODO(), bytes.NewReader(txt), envelopeToRspamcHdrs(msg.Envelope))
 		if err != nil {
 			logger.Warn("learning message failed", "error", err,
 				"event", "rspamd.msg_learn_failed")
@@ -509,9 +509,8 @@ func (c *Client) downloadAndScan(msgData *imapclient.FetchMessageData) (*scanned
 		errCleanupfn()
 		return nil, fmt.Errorf("setting %q file position to beginning failed: %w", tmpFile.Name(), err)
 	}
-
 	// TODO: retry Check if it failed with a temporary error
-	scanResult, err := c.rspamc.Check(context.Background(), tmpFile)
+	scanResult, err := c.rspamc.Check(context.Background(), tmpFile, envelopeToRspamcHdrs(env))
 	if err != nil {
 		errCleanupfn()
 		return nil, err
@@ -537,6 +536,29 @@ func (c *Client) downloadAndScan(msgData *imapclient.FetchMessageData) (*scanned
 		Envelope:    env,
 		CheckResult: scanResult,
 	}, nil
+}
+
+func envelopeToRspamcHdrs(env *imap.Envelope) *rspamc.MailHeaders {
+	hdrs := rspamc.MailHeaders{
+		Subject: env.Subject,
+	}
+
+	for _, sndr := range env.From {
+		hdrs.From = append(hdrs.From, sndr.Addr())
+	}
+
+	for _, rcpt := range env.To {
+		hdrs.Recipients = append(hdrs.Recipients, rcpt.Addr())
+	}
+
+	for _, rcpt := range env.Cc {
+		hdrs.Recipients = append(hdrs.Recipients, rcpt.Addr())
+	}
+	for _, rcpt := range env.Bcc {
+		hdrs.Recipients = append(hdrs.Recipients, rcpt.Addr())
+	}
+
+	return &hdrs
 }
 
 func (c *Client) ProcessScanBox(startStatus *SeenStatus) (*SeenStatus, error) {
