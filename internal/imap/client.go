@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"slices"
 	"strconv"
@@ -19,9 +20,11 @@ import (
 	"github.com/emersion/go-imap/v2/imapclient"
 )
 
-const hdrScanSymbolPrefix = "X-rspamd-iscan-"
-
-const defChanBufSiz = 32
+const (
+	defChanBufSiz       = 32
+	dialTimeout         = 120 * time.Second
+	hdrScanSymbolPrefix = "X-rspamd-iscan-"
+)
 
 type eventNewMessages struct {
 	NewMsgCount uint32
@@ -97,6 +100,8 @@ func NewClient(cfg *Config) (*Client, error) {
 		UnilateralDataHandler: &imapclient.UnilateralDataHandler{
 			Mailbox: c.mailboxUpdateHandler,
 		},
+		Dialer: &net.Dialer{Timeout: dialTimeout},
+
 		// DebugWriter: os.Stderr,
 	})
 	if err != nil {
@@ -113,6 +118,23 @@ func NewClient(cfg *Config) (*Client, error) {
 	c.clt = clt
 
 	return c, nil
+}
+
+func (c *Client) dial(address string, opts *imapclient.Options) (*imapclient.Client, error) {
+	_, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+
+	logger := c.logger.With("server", address).With("timeout", dialTimeout)
+
+	if port == "993" || port == "imaps" {
+		logger.Debug("connecting to imap server", "tlsmode", "implicit")
+		return imapclient.DialTLS(address, opts)
+	}
+
+	logger.Debug("connecting to imap server", "tlsmode", "explicit")
+	return imapclient.DialStartTLS(address, opts)
 }
 
 func (c *Client) mailboxUpdateHandler(d *imapclient.UnilateralDataMailbox) {
