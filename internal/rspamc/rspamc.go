@@ -96,11 +96,11 @@ func (c *Client) Check(ctx context.Context, msg io.Reader, hdrs *MailHeaders) (*
 func (c *Client) Ham(ctx context.Context, msg io.Reader, hdrs *MailHeaders) error {
 	// resp code 208 == already learned, returns a json with an "error"
 	// field
-	return c.sendRequest(ctx, c.hamURL, nil, msg, hdrs)
+	return c.sendRequest(ctx, c.hamURL, hdrs.asHeader(), msg, nil)
 }
 
 func (c *Client) Spam(ctx context.Context, msg io.Reader, hdrs *MailHeaders) error {
-	return c.sendRequest(ctx, c.spamURL, nil, msg, hdrs)
+	return c.sendRequest(ctx, c.spamURL, hdrs.asHeader(), msg, nil)
 }
 
 type CheckResult struct {
