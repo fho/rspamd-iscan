@@ -34,7 +34,9 @@ func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, 
 		return nil
 	}
 
-	req.Header = hdrs.Clone()
+	if hdrs != nil {
+		req.Header = hdrs.Clone()
+	}
 	req.Header.Add("password", c.password)
 
 	// TODO: use custom client with configured timeouts
