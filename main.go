@@ -18,12 +18,24 @@ var (
 	commit  = "commit-undefined"
 )
 
-func main() {
-	cfgPath := flag.String("cfg-file", "/etc/rspamd-iscan/config.toml", "Path to the rspamd-iscan config file")
-	printVersion := flag.Bool("version", false, "print the version and exit")
+type flags struct {
+	cfgPath      string
+	printVersion bool
+}
+
+func parseFlags() *flags {
+	var result flags
+
+	flag.StringVar(&result.cfgPath, "cfg-file", "/etc/rspamd-iscan/config.toml", "Path to the rspamd-iscan config file")
+	flag.BoolVar(&result.printVersion, "version", false, "print the version and exit")
 	flag.Parse()
 
-	if *printVersion {
+	return &result
+}
+
+func main() {
+	flags := parseFlags()
+	if flags.printVersion {
 		fmt.Printf("rspamd-iscan %s (%s)\n", version, commit)
 		os.Exit(0)
 	}
@@ -42,7 +54,7 @@ func main() {
 	})
 	logger := slog.New(h)
 
-	cfg, err := config.FromFile(*cfgPath)
+	cfg, err := config.FromFile(flags.cfgPath)
 	if err != nil {
 		logger.Error("loading config failed", "error", err)
 		os.Exit(1)
