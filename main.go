@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/fho/rspamd-iscan/internal/config"
-	"github.com/fho/rspamd-iscan/internal/imap"
+	"github.com/fho/rspamd-iscan/internal/iscan"
 	"github.com/fho/rspamd-iscan/internal/rspamc"
 
 	flag "github.com/spf13/pflag"
@@ -64,25 +64,20 @@ func main() {
 
 	fmt.Println(cfg.String())
 
-	if err := cfg.Validate(); err != nil {
-		logger.Error("validating config failed", "error", err)
-		os.Exit(1)
-	}
-
 	// TODO: allow passing all attrs as single URL to rspamc http client
 	rspamc := rspamc.New(logger, cfg.RspamdURL, cfg.RspamdPassword)
 
 	for {
-		clt, err := imap.NewClient(&imap.Config{
+		clt, err := iscan.NewClient(&iscan.Config{
 			ServerAddr:            cfg.ImapAddr,
 			User:                  cfg.ImapUser,
-			Passwd:                cfg.ImapPassword,
+			Password:              cfg.ImapPassword,
 			ScanMailbox:           cfg.ScanMailbox,
 			InboxMailbox:          cfg.InboxMailbox,
 			HamMailbox:            cfg.HamMailbox,
 			SpamMailboxName:       cfg.SpamMailbox,
 			UndetectedMailboxName: cfg.UndetectedMailbox,
-			BackupMailboxName:     cfg.BackupMailbox,
+			BackupMailbox:         cfg.BackupMailbox,
 			SpamTreshold:          cfg.SpamThreshold,
 			TempDir:               cfg.TempDir,
 			KeepTempFiles:         cfg.KeepTempFiles,
@@ -94,15 +89,16 @@ func main() {
 			os.Exit(1)
 		}
 
-		err = clt.Run()
+		err = clt.Start()
 		if err != nil {
-			clt.Close()
-			rError := &imap.ErrRetryable{}
+			_ = clt.Stop()
+			rError := &iscan.ErrRetryable{}
 			if !errors.As(err, &rError) {
 				logger.Error("run failed with fatal error, terminating", "error", err)
 				os.Exit(1)
 			}
 		}
+
 		logger.Error("run failed with temporary error, restarting imap client", "error", err)
 	}
 }

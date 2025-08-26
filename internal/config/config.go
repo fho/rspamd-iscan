@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -92,43 +91,4 @@ func (c *Config) SetDefaults() {
 	if c.TempDir == "" {
 		c.TempDir = os.TempDir()
 	}
-}
-
-func (c *Config) Validate() error {
-	if c.ScanMailbox == c.InboxMailbox {
-		return errors.New("ScanMailbox and InboxMailbox must differ")
-	}
-
-	if c.ScanMailbox == c.SpamMailbox {
-		return errors.New("ScanMailbox and SpamMailbox must differ")
-	}
-
-	if c.ScanMailbox == c.HamMailbox {
-		return errors.New("HamMailbox and SpamMailbox must differ")
-	}
-
-	if c.BackupMailbox == "" {
-		return errors.New("BackupMailbox can not be empty")
-	}
-
-	if c.BackupMailbox == c.InboxMailbox {
-		return errors.New("BackupMailbox and InboxMailbox must differ")
-	}
-
-	// Using the same mailbox for Spam, Ham and/or Backup would be weird but
-	// should work fine!
-	if c.SpamThreshold == 0 {
-		return errors.New("SpamThreshold must be >0")
-	}
-
-	fd, err := os.Stat(c.TempDir)
-	if err != nil {
-		return fmt.Errorf("invalid TempDir (%s): %w", c.TempDir, err)
-	}
-
-	if !fd.IsDir() {
-		return fmt.Errorf("specified TempDir (%s) is not a directory", c.TempDir)
-	}
-
-	return nil
 }
