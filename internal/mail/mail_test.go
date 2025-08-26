@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"io"
 	"os"
-	"path/filepath"
 	"testing"
+
+	"github.com/fho/rspamd-iscan/internal/testutils/mail"
 )
 
 func AssertNoErr(t *testing.T, err error) {
@@ -29,7 +30,7 @@ func TestAddHeaders(t *testing.T) {
 	fd, err := os.CreateTemp(tmpdir, t.Name())
 	AssertNoErr(t, err)
 
-	exampleFd, err := os.Open(filepath.Join("testdata", "example.mail"))
+	exampleFd, err := os.Open(mail.TestHamMailPath(t))
 	AssertNoErr(t, err)
 
 	_, err = io.Copy(fd, exampleFd)

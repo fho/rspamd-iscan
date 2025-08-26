@@ -1,4 +1,4 @@
-package imap
+package iscan
 
 import (
 	"errors"
