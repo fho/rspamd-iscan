@@ -441,7 +441,6 @@ func (c *Client) Start() error {
 	}
 
 	for {
-
 		eventCh, monitorCancelFn, err := c.clt.Monitor(c.scanMailbox)
 		if err != nil {
 			return WrapRetryableError(err)
