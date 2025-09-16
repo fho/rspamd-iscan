@@ -412,43 +412,39 @@ func (c *Client) Start() error {
 	}
 
 	for {
+
 		eventCh, monitorCancelFn, err := c.clt.Monitor(c.scanMailbox)
 		if err != nil {
 			return WrapRetryableError(err)
 		}
-		c.logger.Debug("waiting for mailbox update events")
 
+		c.logger.Debug("waiting for mailbox update events")
 		select {
-		// sometimes monitoring stops working and no updates are
-		// send anymore, despite new imap messages,
-		// therefore we additionally check every 30min for new
-		// mails, to workaround it.
-		//
-		// TODO: check exactly every learnInterval for new messages,
-		// to make it deterministic for testcases
-		case <-time.After(30 * time.Minute):
-			c.logger.Debug("timer expired, checking mailbox for new messages")
+		case <-time.After(c.learnInterval - time.Since(lastLearnAt)):
+			c.logger.Debug("learn timer expired, checking mailboxes for new messages")
 
 			if err := monitorCancelFn(); err != nil {
 				return WrapRetryableError(err)
 			}
 
-			err := c.ProcessScanBox()
-			if err != nil {
+			// sometimes monitoring stopped working and no updates
+			// were send anymore, despite new imap messages, as
+			// workaround we additionally check the Scanbox. //
+			// TODO: verify if that really is still an issue or
+			// could be removed
+			if err := c.ProcessScanBox(); err != nil {
 				return WrapRetryableError(err)
 			}
 
-			if time.Since(lastLearnAt) >= c.learnInterval {
-				if err := c.ProcessHam(); err != nil {
-					return WrapRetryableError(err)
-				}
-
-				if err := c.ProcessSpam(); err != nil {
-					return WrapRetryableError(err)
-				}
-
-				lastLearnAt = time.Now()
+			if err := c.ProcessHam(); err != nil {
+				return WrapRetryableError(err)
 			}
+
+			if err := c.ProcessSpam(); err != nil {
+				return WrapRetryableError(err)
+			}
+
+			lastLearnAt = time.Now()
 
 		case evA, ok := <-eventCh:
 			if !ok {
@@ -459,13 +455,6 @@ func (c *Client) Start() error {
 
 			if err := monitorCancelFn(); err != nil {
 				return WrapRetryableError(err)
-			}
-
-			if time.Since(lastLearnAt) >= c.learnInterval {
-				if err := c.ProcessHam(); err != nil {
-					return WrapRetryableError(err)
-				}
-				lastLearnAt = time.Now()
 			}
 
 			if evA.NewMsgCount == 0 {
