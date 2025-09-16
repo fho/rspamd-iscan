@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/fho/rspamd-iscan/internal/config"
 	"github.com/fho/rspamd-iscan/internal/iscan"
@@ -33,6 +35,27 @@ func parseFlags() *flags {
 	return &result
 }
 
+func installSigHandler(logger *slog.Logger, clt *iscan.Client) {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		var strSig string
+
+		sig := <-sigCh
+
+		switch ssig, ok := sig.(syscall.Signal); ok {
+		case true:
+			strSig = fmt.Sprintf("%d, %s", ssig, ssig)
+		default:
+			strSig = sig.String()
+		}
+
+		logger.Info(fmt.Sprintf("received signal (%s), terminating iscan process", strSig))
+		_ = clt.Stop()
+	}()
+}
+
 func main() {
 	flags := parseFlags()
 	if flags.printVersion {
@@ -40,7 +63,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	// TODO: implement signal handler for clean shutdown
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
@@ -89,16 +111,22 @@ func main() {
 			os.Exit(1)
 		}
 
+		installSigHandler(logger, clt)
+
 		err = clt.Start()
 		if err != nil {
 			_ = clt.Stop()
 			rError := &iscan.ErrRetryable{}
 			if !errors.As(err, &rError) {
-				logger.Error("run failed with fatal error, terminating", "error", err)
+				logger.Error("non-retryable error occurred, terminating", "error", err)
 				os.Exit(1)
 			}
-		}
 
-		logger.Error("run failed with temporary error, restarting imap client", "error", err)
+			logger.Error("retryable error occurred, restarting monitoring iscan process", "error", err)
+			continue
+		}
+		_ = clt.Stop()
+		logger.Info("iscan process terminated normally, shutting down")
+		return
 	}
 }
