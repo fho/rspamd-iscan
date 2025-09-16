@@ -90,8 +90,8 @@ func TestProcessScanBox_DownloadAndScanFails(t *testing.T) {
 
 func TestRun(t *testing.T) {
 	srv, clt := startServerClient(t)
+	clt.learnInterval = 100 * time.Millisecond
 
-	clt.learnInterval = 50 * time.Millisecond
 	runErrChan := make(chan error, 1)
 	go func() {
 		runErrChan <- clt.Start()
@@ -105,7 +105,13 @@ func TestRun(t *testing.T) {
 	err = clt2.clt.Upload(mail.TestSpamMailPath(t), srv.ScanMailbox, time.Now())
 	assert.NoError(t, err)
 
-	for clt.cntScannedMails.Load() < 2 {
+	err = clt2.clt.Upload(mail.TestHamMailPath(t), srv.HamMailbox, time.Now())
+	assert.NoError(t, err)
+
+	err = clt2.clt.Upload(mail.TestSpamMailPath(t), srv.UndetectedMailbox, time.Now())
+	assert.NoError(t, err)
+
+	for clt.cntScannedMails.Load() < 4 {
 		time.Sleep(50 * time.Millisecond)
 	}
 
@@ -120,11 +126,11 @@ func TestRun(t *testing.T) {
 		mailboxContainsMailCnt(t, clt2.clt, clt.backupMailbox, mail.SpamMailSubject),
 	)
 
-	assert.Equal(t, 1,
+	assert.Equal(t, 2,
 		mailboxContainsMailCnt(t, clt2.clt, clt.inboxMailbox, mail.HamMailSubject),
 	)
 
-	assert.Equal(t, 1,
+	assert.Equal(t, 2,
 		mailboxContainsMailCnt(t, clt2.clt, clt.spamMailbox, mail.SpamMailSubject),
 	)
 
