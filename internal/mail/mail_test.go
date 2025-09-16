@@ -40,9 +40,9 @@ func TestAddHeaders(t *testing.T) {
 	AssertNoErr(t, err)
 	_ = exampleFd.Close()
 
-	hdrs, err := AsHeaders(map[string]string{
-		"New-Header1": "v1",
-		"New-Header2": "v2",
+	hdrs, err := AsHeaders([]*Header{
+		{Name: "New-Header1", Body: "v1"},
+		{Name: "New-Header2", Body: "v2"},
 	})
 	AssertNoErr(t, err)
 	err = AddHeaders(fd.Name(), hdrs)
