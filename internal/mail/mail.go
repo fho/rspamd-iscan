@@ -17,15 +17,11 @@ import (
 // (https://datatracker.ietf.org/doc/html/rfc2822#section-3.5)
 const maxLineLength = 1000
 
-// strEmailHdrCharsOnly removes all non-printable ASCII chars and colons from s
-func strEmailHdrCharsOnly(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r >= 33 && r <= 126 && r != ':' {
-			return r
-		}
-
-		return -1
-	}, s)
+// Header represent a single header key-value.
+// (Fields are named as in the RFC.)
+type Header struct {
+	Name string
+	Body string
 }
 
 // AsHeader converts the header name and body to an email header line.
@@ -34,14 +30,14 @@ func strEmailHdrCharsOnly(s string) string {
 // an invalid characters an error is returned.
 //
 // https://datatracker.ietf.org/doc/html/rfc2822#section-2.2
-func AsHeader(name, w string) ([]byte, error) {
+func AsHeader(name, body string) ([]byte, error) {
 	nClean := strEmailHdrCharsOnly(name)
 	if len(nClean) != len(name) {
 		return nil, errors.New("header name contains an invalid character")
 	}
 
-	bClean := strEmailHdrCharsOnly(w)
-	if len(bClean) != len(w) {
+	bClean := strEmailHdrCharsOnly(body)
+	if len(bClean) != len(body) {
 		return nil, errors.New("header body contains an invalid character")
 	}
 
@@ -56,18 +52,17 @@ func AsHeader(name, w string) ([]byte, error) {
 }
 
 // AsHeaders converts the map to an email header section
-func AsHeaders(hdrs map[string]string) ([]byte, error) {
+func AsHeaders(hdrs []*Header) ([]byte, error) {
 	result := make([]byte, 0, 4096)
 
-	i := 0
-	for k, v := range hdrs {
-		hdr, err := AsHeader(k, v)
+	for _, hdr := range hdrs {
+		bHdr, err := AsHeader(hdr.Name, hdr.Body)
 		if err != nil {
-			return nil, fmt.Errorf("converting header '%q: %q' failed: %w", k, v, err)
+			return nil, fmt.Errorf("converting header '%q: %q' failed: %w",
+				hdr.Name, hdr.Body, err)
 		}
 
-		result = append(result, hdr...)
-		i++
+		result = append(result, bHdr...)
 	}
 
 	return slices.Clip(result), nil
@@ -165,4 +160,15 @@ func addHeaders(in io.Reader, out io.Writer, hdrs []byte) error {
 	}
 
 	return nil
+}
+
+// strEmailHdrCharsOnly removes all non-printable ASCII chars and colons from s
+func strEmailHdrCharsOnly(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 33 && r <= 126 && r != ':' {
+			return r
+		}
+
+		return -1
+	}, s)
 }

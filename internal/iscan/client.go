@@ -7,7 +7,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,7 +21,8 @@ import (
 )
 
 const (
-	hdrScanSymbolPrefix = "X-rspamd-iscan-"
+	hdrPrefix      = "X-rspamd-iscan-"
+	hdrRspamdScore = hdrPrefix + "Score"
 )
 
 type RspamdClient interface {
@@ -161,16 +164,18 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 	return nil
 }
 
-func toHdrMap(prefix string, scores map[string]*rspamc.Symbol, skipZeroScore bool) map[string]string {
-	result := make(map[string]string, len(scores))
+func asHdrMap(prefix string, scores map[string]*rspamc.Symbol, skipZeroScores bool) []*mail.Header {
+	result := make([]*mail.Header, 0, len(scores))
 
 	for _, v := range scores {
-		if skipZeroScore && v.Score == 0 {
+		if skipZeroScores && v.Score == 0 {
 			continue
 		}
 
-		// map key is the same as v.Name
-		result[prefix+v.Name] = fmt.Sprint(v.Score)
+		result = append(result, &mail.Header{
+			Name: prefix + v.Name,
+			Body: fmt.Sprint(v.Score),
+		})
 	}
 
 	return result
@@ -179,8 +184,13 @@ func toHdrMap(prefix string, scores map[string]*rspamc.Symbol, skipZeroScore boo
 func addScanResultHeaders(mailFilepath string, result *rspamc.CheckResult) error {
 	var hdrsData []byte
 
-	hdrs := toHdrMap(hdrScanSymbolPrefix+"Symbol-", result.Symbols, true)
-	hdrs[hdrScanSymbolPrefix+"Score"] = fmt.Sprint(result.Score)
+	hdrs := asHdrMap(hdrPrefix+"Symbol-", result.Symbols, true)
+	hdrs = append(hdrs, &mail.Header{
+		Name: hdrRspamdScore,
+		Body: fmt.Sprint(result.Score),
+	})
+
+	sortHeaders(hdrs)
 
 	// TODO: instead of adding a header line per symbol, add a multiline
 	// header with all symbols
@@ -190,6 +200,25 @@ func addScanResultHeaders(mailFilepath string, result *rspamc.CheckResult) error
 	}
 
 	return mail.AddHeaders(mailFilepath, hdrsData)
+}
+
+func sortHeaders(hdrs []*mail.Header) {
+	slices.SortFunc(hdrs, func(a, b *mail.Header) int {
+		if a.Name == hdrRspamdScore {
+			return 1
+		}
+
+		if b.Name == hdrRspamdScore {
+			return -1
+		}
+
+		score := strings.Compare(a.Name, b.Name)
+		if score == 0 {
+			return strings.Compare(a.Body, b.Body)
+		}
+
+		return score
+	})
 }
 
 func (c *Client) isSpam(r *rspamc.CheckResult) bool {
