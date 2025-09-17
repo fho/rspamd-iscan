@@ -244,7 +244,6 @@ func (c *Client) replaceWithModifiedMails(mails []*scannedMail) error {
 		logger := c.logger.With(
 			"mail.subject", mail.Envelope.Subject,
 			"mail.uid", mail.UID,
-			"filepath", mail.Path,
 		)
 
 		// TODO: support deleting emails from the mailbox, when backupMailbox is
@@ -275,6 +274,7 @@ func (c *Client) replaceWithModifiedMails(mails []*scannedMail) error {
 			logger.Warn(
 				"uploading scanned email to inbox failed, please find the original email in the backup mailbox!",
 				"event", "imap.msg_append_failed",
+				"filepath", mail.Path,
 			)
 
 			continue
@@ -295,6 +295,7 @@ func (c *Client) replaceWithModifiedMails(mails []*scannedMail) error {
 				"deleting email file failed",
 				"error", err,
 				"event", "imap.msg_delete_failed",
+				"filepath", mail.Path,
 			)
 		}
 	}
