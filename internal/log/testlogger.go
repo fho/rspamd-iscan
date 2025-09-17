@@ -10,8 +10,7 @@ import (
 func SlogTestLogger(t *testing.T) *slog.Logger {
 	return slog.New(
 		slog.NewTextHandler(t.Output(), &slog.HandlerOptions{
-			AddSource: true,
-			Level:     slog.LevelDebug,
+			Level: slog.LevelDebug,
 		}),
 	)
 }
