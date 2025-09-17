@@ -51,8 +51,11 @@ type Client struct {
 
 	rspamc RspamdClient
 
-	// cntScannedMails is only used in testcases
-	cntScannedMails atomic.Uint64
+	// cntProcessedMails counts the number of emails that have been processed
+	// in the [Client.scanMailbox], [Client.hamMailbox] and [Client.
+	// spamMailbox].
+	// It is only used in tests.
+	cntProcessedMails atomic.Uint64
 }
 
 type scannedMail struct {
@@ -157,6 +160,8 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 	if err != nil {
 		return fmt.Errorf("moving messages after learning failed: %w", err)
 	}
+
+	c.cntProcessedMails.Add(uint64(len(learnedMsgUIDs)))
 
 	return nil
 }
@@ -378,7 +383,7 @@ func (c *Client) ProcessScanBox() error {
 		errs = append(errs, err)
 	}
 
-	c.cntScannedMails.Add(1)
+	c.cntProcessedMails.Add(uint64(len(scannedMails)))
 
 	return errors.Join(errs...)
 }

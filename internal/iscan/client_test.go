@@ -111,7 +111,7 @@ func TestRun(t *testing.T) {
 	err = clt2.clt.Upload(mail.TestSpamMailPath(t), srv.UndetectedMailbox, time.Now())
 	assert.NoError(t, err)
 
-	for clt.cntScannedMails.Load() < 4 {
+	for clt.cntProcessedMails.Load() < 4 {
 		time.Sleep(50 * time.Millisecond)
 	}
 
