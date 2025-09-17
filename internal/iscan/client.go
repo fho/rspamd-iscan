@@ -76,7 +76,7 @@ func NewClient(cfg *Config) (*Client, error) {
 	}
 
 	c := &Client{
-		logger:            log.SloggerWithGroup(cfg.Logger, "iscan"),
+		logger:            log.EnsureLoggerInstance(cfg.Logger),
 		inboxMailbox:      cfg.InboxMailbox,
 		scanMailbox:       cfg.ScanMailbox,
 		spamMailbox:       cfg.SpamMailboxName,

@@ -74,7 +74,7 @@ func Connect(cfg *Config) (*Client, error) {
 
 func newClient(cfg *Config) *Client {
 	result := Client{}
-	result.logger = log.SloggerWithGroup(cfg.Logger, "imapclt")
+	result.logger = log.EnsureLoggerInstance(cfg.Logger)
 
 	return &result
 }
