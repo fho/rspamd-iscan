@@ -32,12 +32,14 @@ func startServerClient(t *testing.T) (*imapserver.Server, *Client) {
 
 func newTestClient(t *testing.T, srv *imapserver.Server) *Client {
 	var err error
-	var clt *Client
+
+	clt := NewClient(testClientCfg(t, srv))
 
 	// we retry connecting because the server might not have finished
 	// startup
+
 	for range 9 {
-		clt, err = Connect(testClientCfg(t, srv))
+		err = clt.Connect()
 		if err != nil {
 			t.Logf("establishing connection to imap server failed (server still starting?): %s", err)
 			time.Sleep(500 * time.Millisecond)

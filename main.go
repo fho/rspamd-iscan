@@ -24,9 +24,10 @@ type flags struct {
 	cfgPath      string
 	printVersion bool
 	once         bool
+	dryRun       bool
 }
 
-func parseFlags() *flags {
+func mustParseFlags() *flags {
 	var result flags
 
 	flag.StringVar(&result.cfgPath, "cfg-file", "/etc/rspamd-iscan/config.toml",
@@ -36,8 +37,15 @@ func parseFlags() *flags {
 	flag.BoolVar(&result.once, "once", false,
 		"processes all mails in the ham, spam and scan mailbox once and terminates",
 	)
+	flag.BoolVarP(&result.dryRun, "dry-run", "n", false,
+		"simulates modifying operations on the IMAP server, also enables --once",
+	)
 
 	flag.Parse()
+
+	if result.dryRun {
+		result.once = true
+	}
 
 	return &result
 }
@@ -87,10 +95,11 @@ func installSigHandler(logger *slog.Logger, clt *iscan.Client) {
 
 func newIscanClient(
 	cfg *config.Config,
+	flags *flags,
 	logger *slog.Logger,
 	rspamc iscan.RspamdClient,
 ) (*iscan.Client, error) {
-	clt, err := iscan.NewClient(&iscan.Config{
+	iscanCfg := iscan.Config{
 		ServerAddr:            cfg.ImapAddr,
 		User:                  cfg.ImapUser,
 		Password:              cfg.ImapPassword,
@@ -105,7 +114,10 @@ func newIscanClient(
 		KeepTempFiles:         cfg.KeepTempFiles,
 		Logger:                logger,
 		Rspamc:                rspamc,
-	})
+		DryRun:                flags.dryRun,
+	}
+
+	clt, err := iscan.NewClient(&iscanCfg)
 	if err != nil {
 		logger.Error("creating iscan client failed", "error", err)
 	}
@@ -115,10 +127,11 @@ func newIscanClient(
 
 func runOnceAndTerminate(
 	cfg *config.Config,
+	flags *flags,
 	logger *slog.Logger,
 	rspamc iscan.RspamdClient,
 ) {
-	clt, err := newIscanClient(cfg, logger, rspamc)
+	clt, err := newIscanClient(cfg, flags, logger, rspamc)
 	if err != nil {
 		os.Exit(1)
 	}
@@ -132,11 +145,12 @@ func runOnceAndTerminate(
 
 func mustMonitorUntilFatalError(
 	cfg *config.Config,
+	flags *flags,
 	logger *slog.Logger,
 	rspamc iscan.RspamdClient,
 ) {
 	for {
-		err := monitor(cfg, logger, rspamc)
+		err := monitor(cfg, flags, logger, rspamc)
 		if err != nil {
 			rError := &iscan.ErrRetryable{}
 			if !errors.As(err, &rError) {
@@ -155,10 +169,11 @@ func mustMonitorUntilFatalError(
 
 func monitor(
 	cfg *config.Config,
+	flags *flags,
 	logger *slog.Logger,
 	rspamc iscan.RspamdClient,
 ) error {
-	clt, err := newIscanClient(cfg, logger, rspamc)
+	clt, err := newIscanClient(cfg, flags, logger, rspamc)
 	if err != nil {
 		return err
 	}
@@ -177,7 +192,7 @@ func monitor(
 }
 
 func main() {
-	flags := parseFlags()
+	flags := mustParseFlags()
 	if flags.printVersion {
 		fmt.Printf("rspamd-iscan %s (%s)\n", version, commit)
 		os.Exit(0)
@@ -192,15 +207,21 @@ func main() {
 	}
 
 	cfg.SetDefaults()
-
-	fmt.Println(cfg.String())
+	fmt.Print(cfg.String())
 
 	// TODO: allow passing all attrs as single URL to rspamc http client
 	rspamc := rspamc.New(logger, cfg.RspamdURL, cfg.RspamdPassword)
 
+	// TODO: print flag configuration together with config attributes list
+	if flags.dryRun {
+		fmt.Println("--dry-run enabled, IMAP mailboxes are not modified")
+	}
+
 	if flags.once {
-		runOnceAndTerminate(cfg, logger, rspamc)
+		fmt.Printf("Running 1x and terminating (--once).\n\n")
+		runOnceAndTerminate(cfg, flags, logger, rspamc)
 	} else {
-		mustMonitorUntilFatalError(cfg, logger, rspamc)
+		fmt.Printf("Monitoring IMAP mailboxes continuously.\n\n")
+		mustMonitorUntilFatalError(cfg, flags, logger, rspamc)
 	}
 }
