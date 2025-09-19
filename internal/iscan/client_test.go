@@ -94,7 +94,7 @@ func TestRun(t *testing.T) {
 
 	runErrChan := make(chan error, 1)
 	go func() {
-		runErrChan <- clt.Start()
+		runErrChan <- clt.Monitor()
 	}()
 
 	clt2 := newTestClient(t, srv)
