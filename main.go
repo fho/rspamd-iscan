@@ -23,13 +23,20 @@ var (
 type flags struct {
 	cfgPath      string
 	printVersion bool
+	once         bool
 }
 
 func parseFlags() *flags {
 	var result flags
 
-	flag.StringVar(&result.cfgPath, "cfg-file", "/etc/rspamd-iscan/config.toml", "Path to the rspamd-iscan config file")
-	flag.BoolVar(&result.printVersion, "version", false, "print the version and exit")
+	flag.StringVar(&result.cfgPath, "cfg-file", "/etc/rspamd-iscan/config.toml",
+		"Path to the rspamd-iscan config file")
+	flag.BoolVar(&result.printVersion, "version", false,
+		"print the version and exit")
+	flag.BoolVar(&result.once, "once", false,
+		"processes all mails in the ham, spam and scan mailbox once and terminates",
+	)
+
 	flag.Parse()
 
 	return &result
@@ -113,7 +120,15 @@ func main() {
 
 		installSigHandler(logger, clt)
 
-		err = clt.Start()
+		if flags.once {
+			if err := clt.RunOnce(); err != nil {
+				logger.Error(err.Error())
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}
+
+		err = clt.Monitor()
 		if err != nil {
 			_ = clt.Stop()
 			rError := &iscan.ErrRetryable{}

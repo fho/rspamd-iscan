@@ -418,7 +418,7 @@ func (c *Client) ProcessScanBox() error {
 	return errors.Join(errs...)
 }
 
-// Start monitors the Unscanned mailbox for new messages and processes them
+// Monitor monitors the Unscanned mailbox for new messages and processes them
 // continuously,
 // It also checks periodically the Ham and Undetected Mailbox for new messages.
 // sents them to rspamd for leanring and moves them to their target inbox.
@@ -426,25 +426,15 @@ func (c *Client) ProcessScanBox() error {
 // The method blocks until an error occurred or [*Client.Stop] is called.
 // When an error happens [*Client.Stop] should still be called to ensure that
 // the IMAP connection is closed.
-func (c *Client) Start() error {
+func (c *Client) Monitor() error {
 	c.wgRun.Add(1)
 	defer c.wgRun.Done()
-	err := c.ProcessHam()
-	if err != nil {
-		return fmt.Errorf("learning ham failed: %w", WrapRetryableError(err))
-	}
 
-	err = c.ProcessSpam()
-	if err != nil {
-		return fmt.Errorf("learning spam failed: %w", WrapRetryableError(err))
+	if err := c.RunOnce(); err != nil {
+		return WrapRetryableError(err)
 	}
 
 	lastLearnAt := time.Now()
-
-	err = c.ProcessScanBox()
-	if err != nil {
-		return WrapRetryableError(err)
-	}
 
 	for {
 		eventCh, monitorCancelFn, err := c.clt.Monitor(c.scanMailbox)
@@ -511,8 +501,24 @@ func (c *Client) Start() error {
 	}
 }
 
-// Stop gracefully terminates a running [Client.Start] routine and closes the
-// connection to the IMAP-server.
+// RunOnce processes all mails in the ham, spam and scan mailbox once.
+func (c *Client) RunOnce() error {
+	err := c.ProcessHam()
+	if err != nil {
+		return fmt.Errorf("learning ham failed: %w", WrapRetryableError(err))
+	}
+
+	err = c.ProcessSpam()
+	if err != nil {
+		return fmt.Errorf("learning spam failed: %w", WrapRetryableError(err))
+	}
+
+	return c.ProcessScanBox()
+}
+
+// Stop closes the connection the IMAP-Server.
+// If [Client.Monitor] is being executed concurrently, it first terminates it
+// gracefully.
 func (c *Client) Stop() error {
 	var err error
 
