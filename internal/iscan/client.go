@@ -32,7 +32,8 @@ type RspamdClient interface {
 }
 
 type Client struct {
-	clt    *imapclt.Client
+	clt    IMAPClient
+	rspamc RspamdClient
 	logger *slog.Logger
 
 	stopCh   chan struct{}
@@ -46,13 +47,12 @@ type Client struct {
 	backupMailbox     string
 	undetectedMailbox string
 	spamTreshold      float32
+	dryMode           bool
 
 	tempDir       string
 	keepTempFiles bool
 
 	learnInterval time.Duration
-
-	rspamc RspamdClient
 
 	// cntProcessedMails counts the number of emails that have been processed
 	// in the [Client.scanMailbox], [Client.hamMailbox] and [Client.
@@ -89,20 +89,26 @@ func NewClient(cfg *Config) (*Client, error) {
 		tempDir:           cfg.TempDir,
 		keepTempFiles:     cfg.KeepTempFiles,
 		stopCh:            make(chan struct{}),
+		dryMode:           cfg.DryRun,
 	}
 
-	clt, err := imapclt.Connect(&imapclt.Config{
+	imapCfg := imapclt.Config{
 		Address:       cfg.ServerAddr,
 		User:          cfg.User,
 		Password:      cfg.Password,
 		AllowInsecure: cfg.AllowInsecureIMAPConnection,
 		Logger:        c.logger,
-	})
-	if err != nil {
-		return nil, err
 	}
 
-	c.clt = clt
+	if cfg.DryRun {
+		c.clt = imapclt.NewDryClient(&imapCfg)
+	} else {
+		c.clt = imapclt.NewClient(&imapCfg)
+	}
+
+	if err := c.clt.Connect(); err != nil {
+		return nil, err
+	}
 
 	return c, nil
 }
@@ -280,12 +286,6 @@ func (c *Client) replaceWithModifiedMails(mails []*scannedMail) error {
 			continue
 		}
 
-		logger.Info(
-			"moved original messages to backup mailbox and uploaded modified message with scan result",
-			"imap.mailbox", mbox,
-			"imap.backupMailbox", c.backupMailbox,
-		)
-
 		if c.keepTempFiles {
 			continue
 		}
@@ -297,6 +297,12 @@ func (c *Client) replaceWithModifiedMails(mails []*scannedMail) error {
 				"event", "imap.msg_delete_failed",
 				"filepath", mail.Path,
 			)
+		}
+
+		if c.dryMode {
+			logger.Info("simulated moving message to backup mailbox and uploading modified mail with scan results to inbox")
+		} else {
+			logger.Info("moved message to backup mailbox and upload modified with scan results to inbox")
 		}
 	}
 

@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fho/rspamd-iscan/internal/imapclt"
 	"github.com/fho/rspamd-iscan/internal/log"
 	"github.com/fho/rspamd-iscan/internal/rspamc"
 	"github.com/fho/rspamd-iscan/internal/testutils/assert"
@@ -139,7 +138,7 @@ func TestRun(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func mailboxIsEmpty(t *testing.T, clt *imapclt.Client, mailbox string) bool {
+func mailboxIsEmpty(t *testing.T, clt IMAPClient, mailbox string) bool {
 	for _, err := range clt.Messages(mailbox) {
 		assert.NoError(t, err)
 		return false
@@ -149,7 +148,7 @@ func mailboxIsEmpty(t *testing.T, clt *imapclt.Client, mailbox string) bool {
 
 func mailboxContainsMailCnt(
 	t *testing.T,
-	clt *imapclt.Client,
+	clt IMAPClient,
 	mailbox string,
 	mailSubject string,
 ) int {

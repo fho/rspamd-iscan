@@ -3,9 +3,22 @@ package iscan
 import (
 	"errors"
 	"fmt"
+	"iter"
 	"log/slog"
 	"os"
+	"time"
+
+	"github.com/fho/rspamd-iscan/internal/imapclt"
 )
+
+type IMAPClient interface {
+	Close() error
+	Connect() error
+	Messages(mailbox string) iter.Seq2[*imapclt.Message, error]
+	Monitor(mailbox string) (<-chan *imapclt.EventNewMessages, func() error, error)
+	Move(uids []uint32, mailbox string) error
+	Upload(path, mailbox string, ts time.Time) error
+}
 
 type Config struct {
 	ServerAddr                  string
@@ -24,8 +37,11 @@ type Config struct {
 	KeepTempFiles bool
 
 	SpamTreshold float32
-	Logger       *slog.Logger
-	Rspamc       RspamdClient
+
+	Logger *slog.Logger
+	Rspamc RspamdClient
+
+	DryRun bool
 }
 
 func (c *Config) validate() error {
@@ -66,6 +82,10 @@ func (c *Config) validate() error {
 
 	if !fd.IsDir() {
 		return fmt.Errorf("specified TempDir (%s) is not a directory", c.TempDir)
+	}
+
+	if c.Rspamc == nil {
+		return errors.New("rspamc can not be nil")
 	}
 
 	return nil

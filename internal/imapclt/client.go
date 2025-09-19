@@ -22,6 +22,11 @@ const (
 )
 
 type Client struct {
+	address       string
+	user          string
+	password      string
+	allowInsecure bool
+
 	clt    *imapclient.Client
 	logger *slog.Logger
 
@@ -46,37 +51,39 @@ type EventNewMessages struct {
 	NewMsgCount uint32
 }
 
-// Connect establishes a connection with the IMAP server and returns a new
-// Client.
-func Connect(cfg *Config) (*Client, error) {
-	result := newClient(cfg)
+// NewClient creates an new IMAP-Client.
+// [*Client.Connect] must be called before any other methods.
+func NewClient(cfg *Config) *Client {
+	return &Client{
+		address:       cfg.Address,
+		user:          cfg.User,
+		password:      cfg.Password,
+		allowInsecure: cfg.AllowInsecure,
+		logger:        log.EnsureLoggerInstance(cfg.Logger),
+	}
+}
 
-	clt, err := result.dial(cfg.Address, cfg.AllowInsecure, &imapclient.Options{
+// Connect establishes a connection the IMAP-Server.
+func (c *Client) Connect() error {
+	clt, err := c.dial(c.address, c.allowInsecure, &imapclient.Options{
 		UnilateralDataHandler: &imapclient.UnilateralDataHandler{
-			Mailbox: result.mailboxUpdateHandler,
+			Mailbox: c.mailboxUpdateHandler,
 		},
 		Dialer: &net.Dialer{Timeout: dialTimeout},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("establishing imap server connection failed: %w", err)
+		return fmt.Errorf("establishing imap server connection failed: %w", err)
 	}
-	result.clt = clt
+	c.clt = clt
 
-	if err := clt.Login(cfg.User, cfg.Password).Wait(); err != nil {
-		return nil, fmt.Errorf("login at imap server failed: %w", err)
+	if err := clt.Login(c.user, c.password).Wait(); err != nil {
+		return fmt.Errorf("login at imap server failed: %w", err)
 	}
 
-	result.logger.Info("connection established, authentication succeeded",
+	c.logger.Info("connection established, authentication succeeded",
 		"event", "imap.connection_established")
 
-	return result, nil
-}
-
-func newClient(cfg *Config) *Client {
-	result := Client{}
-	result.logger = log.EnsureLoggerInstance(cfg.Logger)
-
-	return &result
+	return nil
 }
 
 func (c *Client) Close() error {
