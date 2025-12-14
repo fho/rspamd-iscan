@@ -27,8 +27,9 @@ type Client struct {
 	password      string
 	allowInsecure bool
 
-	clt    *imapclient.Client
-	logger *slog.Logger
+	clt         *imapclient.Client
+	logger      *slog.Logger
+	logIMAPData bool
 
 	newMessagesCh chan<- *EventNewMessages
 	mu            sync.Mutex
@@ -45,6 +46,9 @@ type Config struct {
 	// connection without encryption when the server does not support TLS
 	AllowInsecure bool
 	Logger        *slog.Logger
+	// LogIMAPData enables logging raw IMAP protocol data with debug
+	// priority, it can contain sensitive information
+	LogIMAPData bool
 }
 
 type EventNewMessages struct {
@@ -60,16 +64,23 @@ func NewClient(cfg *Config) *Client {
 		password:      cfg.Password,
 		allowInsecure: cfg.AllowInsecure,
 		logger:        log.EnsureLoggerInstance(cfg.Logger),
+		logIMAPData:   cfg.LogIMAPData,
 	}
 }
 
 // Connect establishes a connection the IMAP-Server.
 func (c *Client) Connect() error {
+	var debugWriter io.Writer
+	if c.logIMAPData {
+		debugWriter = NewDebugWriter(c.logger)
+	}
+
 	clt, err := c.dial(c.address, c.allowInsecure, &imapclient.Options{
 		UnilateralDataHandler: &imapclient.UnilateralDataHandler{
 			Mailbox: c.mailboxUpdateHandler,
 		},
-		Dialer: &net.Dialer{Timeout: dialTimeout},
+		Dialer:      &net.Dialer{Timeout: dialTimeout},
+		DebugWriter: debugWriter,
 	})
 	if err != nil {
 		return fmt.Errorf("establishing imap server connection failed: %w", err)

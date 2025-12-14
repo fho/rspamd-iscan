@@ -21,11 +21,6 @@ type IMAPClient interface {
 }
 
 type Config struct {
-	ServerAddr                  string
-	AllowInsecureIMAPConnection bool
-	User                        string
-	Password                    string
-
 	BackupMailbox         string
 	HamMailbox            string
 	InboxMailbox          string
@@ -38,10 +33,9 @@ type Config struct {
 
 	SpamTreshold float32
 
-	Logger *slog.Logger
-	Rspamc RspamdClient
-
-	DryRun bool
+	Logger     *slog.Logger
+	IMAPClient IMAPClient
+	Rspamc     RspamdClient
 }
 
 func (c *Config) validate() error {

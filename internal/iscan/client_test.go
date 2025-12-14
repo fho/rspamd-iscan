@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fho/rspamd-iscan/internal/imapclt"
 	"github.com/fho/rspamd-iscan/internal/log"
 	"github.com/fho/rspamd-iscan/internal/rspamc"
 	"github.com/fho/rspamd-iscan/internal/testutils/assert"
@@ -20,33 +21,36 @@ func startServerClient(t *testing.T) (*imapserver.Server, *Client) {
 	return srv, newTestClient(t, srv)
 }
 
-func testClientCfg(t *testing.T, srv *imapserver.Server) *Config {
+func testClientCfg(t *testing.T, clt IMAPClient, srv *imapserver.Server) *Config {
 	return &Config{
-		ServerAddr:                  srv.ListenAddr,
-		User:                        srv.UserName,
-		Password:                    srv.UserPasswd,
-		AllowInsecureIMAPConnection: true,
-		ScanMailbox:                 srv.ScanMailbox,
-		InboxMailbox:                srv.InboxMailBox,
-		BackupMailbox:               srv.BackupMailbox,
-		HamMailbox:                  srv.HamMailbox,
-		SpamMailboxName:             srv.SpamMailbox,
-		UndetectedMailboxName:       srv.UndetectedMailbox,
-		Logger:                      log.SlogTestLogger(t),
-		Rspamc:                      mock.NewRspamc(),
-		SpamTreshold:                10,
-		TempDir:                     t.TempDir(),
+		ScanMailbox:           srv.ScanMailbox,
+		InboxMailbox:          srv.InboxMailBox,
+		BackupMailbox:         srv.BackupMailbox,
+		HamMailbox:            srv.HamMailbox,
+		SpamMailboxName:       srv.SpamMailbox,
+		UndetectedMailboxName: srv.UndetectedMailbox,
+		Logger:                log.SlogTestLogger(t),
+		Rspamc:                mock.NewRspamc(),
+		IMAPClient:            clt,
+		SpamTreshold:          10,
+		TempDir:               t.TempDir(),
 	}
 }
 
 func newTestClient(t *testing.T, srv *imapserver.Server) *Client {
 	var err error
-	var clt *Client
+
+	imapClt := imapclt.NewClient(&imapclt.Config{
+		Address:       srv.ListenAddr,
+		User:          srv.UserName,
+		Password:      srv.UserPasswd,
+		AllowInsecure: true,
+	})
 
 	// we retry connecting because the server might not have finished
 	// startup
 	for range 9 {
-		clt, err = NewClient(testClientCfg(t, srv))
+		err = imapClt.Connect()
 		if err != nil {
 			t.Logf("establishing connection to imap server failed (server still starting?): %s", err)
 			time.Sleep(500 * time.Millisecond)
@@ -54,10 +58,12 @@ func newTestClient(t *testing.T, srv *imapserver.Server) *Client {
 		}
 		break
 	}
-
 	assert.NoError(t, err)
 
 	t.Logf("connection to imap server established successfully")
+
+	clt, err := NewClient(testClientCfg(t, imapClt, srv))
+	assert.NoError(t, err)
 
 	t.Cleanup(func() { _ = clt.Stop() })
 	return clt
