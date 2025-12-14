@@ -23,6 +23,7 @@ type Config struct {
 	SpamThreshold     float32
 	TempDir           string
 	KeepTempFiles     bool
+	LogIMAPData       bool
 }
 
 func (c *Config) String() string {
@@ -60,6 +61,7 @@ func (c *Config) String() string {
 	printKv("Backup Mailbox", c.BackupMailbox)
 	printKv("Temporary Directory", c.TempDir)
 	printKv("Keep Temporary Files", c.KeepTempFiles)
+	printKv("Log IMAP Data", c.LogIMAPData)
 
 	sb.WriteRune('\n')
 	fmt.Fprintf(&sb, "Mails in %q are scanned and backuped to %q.\n", c.ScanMailbox, c.BackupMailbox)

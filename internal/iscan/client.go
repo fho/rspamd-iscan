@@ -47,7 +47,6 @@ type Client struct {
 	backupMailbox     string
 	undetectedMailbox string
 	spamTreshold      float32
-	dryMode           bool
 
 	tempDir       string
 	keepTempFiles bool
@@ -76,6 +75,7 @@ func NewClient(cfg *Config) (*Client, error) {
 	}
 
 	c := &Client{
+		clt:               cfg.IMAPClient,
 		logger:            log.EnsureLoggerInstance(cfg.Logger),
 		inboxMailbox:      cfg.InboxMailbox,
 		scanMailbox:       cfg.ScanMailbox,
@@ -89,25 +89,6 @@ func NewClient(cfg *Config) (*Client, error) {
 		tempDir:           cfg.TempDir,
 		keepTempFiles:     cfg.KeepTempFiles,
 		stopCh:            make(chan struct{}),
-		dryMode:           cfg.DryRun,
-	}
-
-	imapCfg := imapclt.Config{
-		Address:       cfg.ServerAddr,
-		User:          cfg.User,
-		Password:      cfg.Password,
-		AllowInsecure: cfg.AllowInsecureIMAPConnection,
-		Logger:        c.logger,
-	}
-
-	if cfg.DryRun {
-		c.clt = imapclt.NewDryClient(&imapCfg)
-	} else {
-		c.clt = imapclt.NewClient(&imapCfg)
-	}
-
-	if err := c.clt.Connect(); err != nil {
-		return nil, err
 	}
 
 	return c, nil
@@ -299,11 +280,7 @@ func (c *Client) replaceWithModifiedMails(mails []*scannedMail) error {
 			)
 		}
 
-		if c.dryMode {
-			logger.Info("simulated moving message to backup mailbox and uploading modified mail with scan results to inbox")
-		} else {
-			logger.Info("moved message to backup mailbox and upload modified with scan results to inbox")
-		}
+		logger.Info("moved message to backup mailbox and upload modified with scan results to inbox")
 	}
 
 	return errors.Join(errs...)
