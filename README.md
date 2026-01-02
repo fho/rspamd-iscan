@@ -69,9 +69,15 @@ setup:
 ```toml
 RspamdURL           = "http://192.168.178.2:11334"
 RspamdPassword      = "iwonttellyou"
+# RspamdPasswordFile can be used instead of RspamdPassword to read the password
+# from a file (mutually exclusive with RspamdPassword)
+# RspamdPasswordFile  = "/etc/rspamd-iscan/rspamd-password"
 ImapAddr            = "my-imap-server:993"
 ImapUser            = "rickdeckard"
 ImapPassword        = "zhora"
+# ImapPasswordFile can be used instead of ImapPassword to read the password
+# from a file (mutually exclusive with ImapPassword)
+# ImapPasswordFile    = "/etc/rspamd-iscan/imap-password"
 InboxMailbox        = "INBOX"
 SpamMailbox         = "Spam"
 HamMailbox          = "Ham"

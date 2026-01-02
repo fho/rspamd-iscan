@@ -206,6 +206,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := cfg.LoadPasswordFiles(); err != nil {
+		logger.Error("loading password files failed", "error", err)
+		os.Exit(1)
+	}
+
 	cfg.SetDefaults()
 	fmt.Print(cfg.String())
 

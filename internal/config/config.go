@@ -9,20 +9,22 @@ import (
 )
 
 type Config struct {
-	RspamdURL         string
-	RspamdPassword    string
-	ImapAddr          string
-	ImapUser          string
-	ImapPassword      string
-	InboxMailbox      string
-	SpamMailbox       string
-	ScanMailbox       string
-	HamMailbox        string
-	BackupMailbox     string
-	UndetectedMailbox string
-	SpamThreshold     float32
-	TempDir           string
-	KeepTempFiles     bool
+	RspamdURL          string
+	RspamdPassword     string
+	RspamdPasswordFile string
+	ImapAddr           string
+	ImapUser           string
+	ImapPassword       string
+	ImapPasswordFile   string
+	InboxMailbox       string
+	SpamMailbox        string
+	ScanMailbox        string
+	HamMailbox         string
+	BackupMailbox      string
+	UndetectedMailbox  string
+	SpamThreshold      float32
+	TempDir            string
+	KeepTempFiles      bool
 }
 
 func (c *Config) String() string {
@@ -91,4 +93,53 @@ func (c *Config) SetDefaults() {
 	if c.TempDir == "" {
 		c.TempDir = os.TempDir()
 	}
+}
+
+// LoadPasswordFiles reads passwords from files if the *PasswordFile options are set.
+// It returns an error if both Password and PasswordFile are set for the same credential.
+func (c *Config) LoadPasswordFiles() error {
+	// Handle IMAP password
+	if c.ImapPasswordFile != "" {
+		if c.ImapPassword != "" {
+			return fmt.Errorf("ImapPassword and ImapPasswordFile are mutually exclusive")
+		}
+		password, err := readPasswordFile(c.ImapPasswordFile)
+		if err != nil {
+			return fmt.Errorf("reading ImapPasswordFile: %w", err)
+		}
+		c.ImapPassword = password
+	}
+
+	// Handle Rspamd password
+	if c.RspamdPasswordFile != "" {
+		if c.RspamdPassword != "" {
+			return fmt.Errorf("RspamdPassword and RspamdPasswordFile are mutually exclusive")
+		}
+		password, err := readPasswordFile(c.RspamdPasswordFile)
+		if err != nil {
+			return fmt.Errorf("reading RspamdPasswordFile: %w", err)
+		}
+		c.RspamdPassword = password
+	}
+
+	return nil
+}
+
+func readPasswordFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+
+	// Get only the first line (before \n or \r\n)
+	line := string(data)
+	if idx := strings.IndexAny(line, "\r\n"); idx >= 0 {
+		line = line[:idx]
+	}
+
+	password := strings.TrimSpace(line)
+	if password == "" {
+		return "", fmt.Errorf("password file is empty: %s", path)
+	}
+	return password, nil
 }
