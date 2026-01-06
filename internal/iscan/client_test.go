@@ -168,3 +168,42 @@ func mailboxContainsMailCnt(
 
 	return cnt
 }
+
+// TestLearn_MalformedMessage verifies that when a mailbox contains a malformed
+// message (e.g. envelope parsing fails), it is skipped and moved to the
+// destination mailbox.
+func TestLearn_MalformedMessage(t *testing.T) {
+	srv, clt := startServerClient(t)
+
+	hamMail := mail.TestHamMailPath(t)
+	spamMail := mail.TestSpamMailPath(t)
+	malformedMail := mail.TestMalformedMailPath(t)
+
+	assert.NoError(t, clt.clt.Upload(hamMail, srv.ScanMailbox, time.Now()))
+	assert.NoError(t, clt.clt.Upload(malformedMail, srv.ScanMailbox, time.Now()))
+	assert.NoError(t, clt.clt.Upload(spamMail, srv.ScanMailbox, time.Now()))
+	assert.NoError(t, clt.clt.Upload(malformedMail, srv.HamMailbox, time.Now()))
+	assert.NoError(t, clt.clt.Upload(malformedMail, srv.UndetectedMailbox, time.Now()))
+
+	assert.NoError(t, clt.ProcessScanBox())
+	assert.NoError(t, clt.ProcessHam())
+	assert.NoError(t, clt.ProcessSpam())
+
+	assert.Equal(t, true, mailboxIsEmpty(t, clt.clt, srv.ScanMailbox))
+	assert.Equal(t, true, mailboxIsEmpty(t, clt.clt, srv.HamMailbox))
+	assert.Equal(t, true, mailboxIsEmpty(t, clt.clt, srv.UndetectedMailbox))
+	assert.Equal(t, 3, countMessagesInMailbox(t, clt.clt, srv.InboxMailBox))
+	assert.Equal(t, 2, countMessagesInMailbox(t, clt.clt, srv.SpamMailbox))
+}
+
+func countMessagesInMailbox(t *testing.T, clt IMAPClient, mailbox string) int {
+	cnt := 0
+	for _, err := range clt.Messages(mailbox) {
+		var errMalformed *imapclt.ErrMalformedMsg
+		if err != nil && !errors.As(err, &errMalformed) {
+			assert.NoError(t, err)
+		}
+		cnt++
+	}
+	return cnt
+}

@@ -2,7 +2,6 @@ package imapclt
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -61,31 +60,15 @@ func (c *Client) Messages(mailbox string) iter.Seq2[*Message, error] {
 			BodySection: []*imap.FetchItemBodySection{{Peek: true}},
 		})
 
-		var canceled bool
 		for {
 			msg, err := c.fetchNext(fetchCmd)
-			if err != nil {
-				canceled = !yield(nil, err)
-				break
-			}
-
-			if msg == nil {
-				break
-			}
-
-			canceled = !yield(msg, nil)
-			if canceled {
+			if (msg == nil && err == nil) || !yield(msg, err) {
 				break
 			}
 		}
 
 		err = fetchCmd.Close()
 		if err != nil {
-			if !canceled {
-				yield(nil, fmt.Errorf("releasing fetch command failed: %w", err))
-				return
-			}
-
 			logger.Warn("releasing fetch command failed", "error", err)
 		}
 	}
@@ -104,11 +87,12 @@ func (c *Client) fetchNext(fetchCmd *imapclient.FetchCommand) (*Message, error) 
 		return nil, fmt.Errorf("collecting message failed: %w", err)
 	}
 
-	if msg.Envelope == nil {
-		return nil, fmt.Errorf("message envelope is nil")
-	}
 	if msg.UID == 0 {
 		return nil, fmt.Errorf("message uid is 0")
+	}
+
+	if msg.Envelope == nil {
+		return nil, NewErrMalformedMsg("message envelope is nil", uint32(msg.UID))
 	}
 
 	logger := c.logger.With(
@@ -119,11 +103,11 @@ func (c *Client) fetchNext(fetchCmd *imapclient.FetchCommand) (*Message, error) 
 
 	body := msg.FindBodySection(&imap.FetchItemBodySection{})
 	if body == nil {
-		return nil, errors.New("message is missing body section")
+		return nil, NewErrMalformedMsg("message is missing body section", uint32(msg.UID))
 	}
 
 	if len(body) == 0 {
-		return nil, errors.New("message data reader is empty")
+		return nil, NewErrMalformedMsg("message data reader is empty", uint32(msg.UID))
 	}
 
 	return &Message{
