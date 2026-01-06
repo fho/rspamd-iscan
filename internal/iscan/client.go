@@ -112,7 +112,7 @@ func (c *Client) ProcessSpam() error {
 
 func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 	//nolint:prealloc // number of mails is unknown before iterating
-	var learnedMsgUIDs []uint32
+	var processedMsgUIDs []uint32
 
 	logger := c.logger.With("mailbox.source", srcMailbox)
 
@@ -120,6 +120,17 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 
 	for msg, err := range c.clt.Messages(srcMailbox) {
 		if err != nil {
+			var errMalformed *imapclt.ErrMalformedMsg
+			if errors.As(err, &errMalformed) {
+				logger.Warn("skipping malformed message",
+					"mail.uid", errMalformed.UID,
+					"error", err,
+					"event", "imap.msg_malformed",
+				)
+				processedMsgUIDs = append(processedMsgUIDs, errMalformed.UID)
+				continue
+			}
+
 			return fmt.Errorf("fetching messages from imap mailbox failed: %w", err)
 		}
 
@@ -139,19 +150,19 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 		}
 
 		logger.Info("learned message", "event", "rspamd.msg_learned")
-		learnedMsgUIDs = append(learnedMsgUIDs, msg.UID)
+		processedMsgUIDs = append(processedMsgUIDs, msg.UID)
 	}
 
-	if len(learnedMsgUIDs) == 0 {
+	if len(processedMsgUIDs) == 0 {
 		return nil
 	}
 
-	err := c.clt.Move(learnedMsgUIDs, destMailbox)
+	err := c.clt.Move(processedMsgUIDs, destMailbox)
 	if err != nil {
 		return fmt.Errorf("moving messages after learning failed: %w", err)
 	}
 
-	c.cntProcessedMails.Add(uint64(len(learnedMsgUIDs)))
+	c.cntProcessedMails.Add(uint64(len(processedMsgUIDs)))
 
 	return nil
 }
@@ -369,6 +380,7 @@ func envelopeToRspamcHdrs(env *imapclt.Envelope) *rspamc.MailHeaders {
 func (c *Client) ProcessScanBox() error {
 	//nolint:prealloc // number of mails is unknown before iterating
 	var scannedMails []*scannedMail
+	var malformedMailsUIDs []uint32
 	var errs []error
 
 	logger := c.logger.With("mailbox.source", c.scanMailbox)
@@ -376,6 +388,17 @@ func (c *Client) ProcessScanBox() error {
 
 	for msg, err := range c.clt.Messages(c.scanMailbox) {
 		if err != nil {
+			var errMalformed *imapclt.ErrMalformedMsg
+			if errors.As(err, &errMalformed) {
+				logger.Warn("email is malformed, skippng scanning",
+					"mail.uid", errMalformed.UID,
+					"error", err,
+					"event", "imap.msg_malformed",
+				)
+				malformedMailsUIDs = append(malformedMailsUIDs, errMalformed.UID)
+				continue
+			}
+
 			return fmt.Errorf("fetching messages from scanbox failed: %w", err)
 		}
 
@@ -394,6 +417,16 @@ func (c *Client) ProcessScanBox() error {
 	err := c.replaceWithModifiedMails(scannedMails)
 	if err != nil {
 		errs = append(errs, err)
+	}
+
+	if len(malformedMailsUIDs) > 0 {
+		err = c.clt.Move(malformedMailsUIDs, c.inboxMailbox)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("moving malformed mails failed: %w", err))
+		}
+
+		logger.Info("skipped scanning of malformed emails, moved mails to inbox",
+			"count", len(malformedMailsUIDs))
 	}
 
 	c.cntProcessedMails.Add(uint64(len(scannedMails)))

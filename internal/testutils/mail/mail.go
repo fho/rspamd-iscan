@@ -48,3 +48,8 @@ func TestSpamMailPath(t *testing.T) string {
 	proot := findProjectRoot(t)
 	return filepath.Join(proot, "internal", "testutils", "mail", "testdata", "spam.mail")
 }
+
+func TestMalformedMailPath(t *testing.T) string {
+	proot := findProjectRoot(t)
+	return filepath.Join(proot, "internal", "testutils", "mail", "testdata", "malformed_envelope.mail")
+}
