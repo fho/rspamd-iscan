@@ -447,7 +447,7 @@ func (c *Client) Monitor() error {
 	defer c.wgRun.Done()
 
 	if err := c.RunOnce(); err != nil {
-		return WrapRetryableError(err)
+		return err
 	}
 
 	lastLearnAt := time.Now()
@@ -455,7 +455,7 @@ func (c *Client) Monitor() error {
 	for {
 		eventCh, monitorCancelFn, err := c.clt.Monitor(c.scanMailbox)
 		if err != nil {
-			return WrapRetryableError(err)
+			return err
 		}
 
 		c.logger.Debug("waiting for mailbox update events")
@@ -464,7 +464,7 @@ func (c *Client) Monitor() error {
 			c.logger.Debug("learn timer expired, checking mailboxes for new messages")
 
 			if err := monitorCancelFn(); err != nil {
-				return WrapRetryableError(err)
+				return err
 			}
 
 			// sometimes monitoring stopped working and no updates
@@ -473,15 +473,15 @@ func (c *Client) Monitor() error {
 			// TODO: verify if that really is still an issue or
 			// could be removed
 			if err := c.ProcessScanBox(); err != nil {
-				return WrapRetryableError(err)
+				return err
 			}
 
 			if err := c.ProcessHam(); err != nil {
-				return WrapRetryableError(err)
+				return err
 			}
 
 			if err := c.ProcessSpam(); err != nil {
-				return WrapRetryableError(err)
+				return err
 			}
 
 			lastLearnAt = time.Now()
@@ -494,7 +494,7 @@ func (c *Client) Monitor() error {
 			}
 
 			if err := monitorCancelFn(); err != nil {
-				return WrapRetryableError(err)
+				return err
 			}
 
 			if evA.NewMsgCount == 0 {
@@ -504,12 +504,12 @@ func (c *Client) Monitor() error {
 
 			err = c.ProcessScanBox()
 			if err != nil {
-				return WrapRetryableError(err)
+				return err
 			}
 
 		case <-c.stopCh:
 			if err := monitorCancelFn(); err != nil {
-				return WrapRetryableError(err)
+				return err
 			}
 
 			return nil
@@ -521,12 +521,12 @@ func (c *Client) Monitor() error {
 func (c *Client) RunOnce() error {
 	err := c.ProcessHam()
 	if err != nil {
-		return fmt.Errorf("learning ham failed: %w", WrapRetryableError(err))
+		return fmt.Errorf("learning ham failed: %w", err)
 	}
 
 	err = c.ProcessSpam()
 	if err != nil {
-		return fmt.Errorf("learning spam failed: %w", WrapRetryableError(err))
+		return fmt.Errorf("learning spam failed: %w", err)
 	}
 
 	return c.ProcessScanBox()
