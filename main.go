@@ -12,6 +12,7 @@ import (
 	"github.com/fho/rspamd-iscan/internal/config"
 	"github.com/fho/rspamd-iscan/internal/imapclt"
 	"github.com/fho/rspamd-iscan/internal/iscan"
+	"github.com/fho/rspamd-iscan/internal/retry"
 	"github.com/fho/rspamd-iscan/internal/rspamc"
 
 	flag "github.com/spf13/pflag"
@@ -150,50 +151,18 @@ func runOnceAndTerminate(
 	flags *flags,
 	logger *slog.Logger,
 	rspamc iscan.RspamdClient,
-) {
+) error {
 	imapClt, err := newIMAPClient(cfg, flags, logger)
 	if err != nil {
-		logger.Error("creating iscan client failed", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("creating imap client failed: %w", err)
 	}
 
 	clt, err := newIscanClient(cfg, logger, rspamc, imapClt)
 	if err != nil {
-		logger.Error("creating iscan client failed", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("creating iscan client failed %w", err)
 	}
 
-	if err := clt.RunOnce(); err != nil {
-		logger.Error(err.Error())
-		os.Exit(1)
-	}
-	os.Exit(0)
-}
-
-func mustMonitorUntilFatalError(
-	cfg *config.Config,
-	flags *flags,
-	logger *slog.Logger,
-	rspamc iscan.RspamdClient,
-) {
-	retryTimeout := 60 * time.Second
-	for {
-		err := monitor(cfg, flags, logger, rspamc)
-		if err != nil {
-			rError := &iscan.ErrRetryable{}
-			if !errors.As(err, &rError) {
-				logger.Error("non-retryable error occurred, terminating", "error", err)
-				os.Exit(1)
-			}
-
-			logger.Error("retryable error occurred, restarting iscan monitoring process after pause", "error", err, "pause", retryTimeout)
-			time.Sleep(retryTimeout)
-			continue
-		}
-
-		logger.Info("iscan process terminated normally, shutting down")
-		os.Exit(0)
-	}
+	return clt.RunOnce()
 }
 
 func monitor(
@@ -224,19 +193,18 @@ func monitor(
 	return nil
 }
 
-func main() {
+func run() error {
 	flags := mustParseFlags()
 	if flags.printVersion {
 		fmt.Printf("rspamd-iscan %s (%s)\n", version, commit)
-		os.Exit(0)
+		return nil
 	}
 
 	logger := configureLogger()
 
 	cfg, err := config.FromFile(flags.cfgPath)
 	if err != nil {
-		logger.Error("loading config failed", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("loading config failed: %w", err)
 	}
 
 	cfg.SetDefaults()
@@ -247,9 +215,32 @@ func main() {
 
 	if flags.once {
 		fmt.Printf("Running 1x and terminating (--once).\n\n")
-		runOnceAndTerminate(cfg, flags, logger, rspamc)
-	} else {
-		fmt.Printf("Monitoring IMAP mailboxes continuously.\n\n")
-		mustMonitorUntilFatalError(cfg, flags, logger, rspamc)
+		return runOnceAndTerminate(cfg, flags, logger, rspamc)
+	}
+
+	fmt.Printf("Monitoring IMAP mailboxes continuously.\n\n")
+
+	retryRunner := retry.Runner{
+		Fn: func() error { return monitor(cfg, flags, logger, rspamc) },
+		IsRetryable: func(err error) bool {
+			rError := &iscan.ErrRetryable{}
+			return errors.As(err, &rError)
+		},
+		MaxRetriesSameError: 10,
+		RetryIntervals: []time.Duration{
+			3 * time.Second,
+			30 * time.Second,
+			time.Minute,
+			3 * time.Minute,
+		},
+		Logger: logger,
+	}
+
+	return retryRunner.Run()
+}
+
+func main() {
+	if err := run(); err != nil {
+		slog.Error(err.Error())
 	}
 }
