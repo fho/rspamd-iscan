@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"github.com/fho/rspamd-iscan/internal/config"
 	"github.com/fho/rspamd-iscan/internal/imapclt"
 	"github.com/fho/rspamd-iscan/internal/iscan"
+	"github.com/fho/rspamd-iscan/internal/neterr"
 	"github.com/fho/rspamd-iscan/internal/retry"
 	"github.com/fho/rspamd-iscan/internal/rspamc"
 
@@ -221,11 +221,8 @@ func run() error {
 	fmt.Printf("Monitoring IMAP mailboxes continuously.\n\n")
 
 	retryRunner := retry.Runner{
-		Fn: func() error { return monitor(cfg, flags, logger, rspamc) },
-		IsRetryable: func(err error) bool {
-			rError := &iscan.ErrRetryable{}
-			return errors.As(err, &rError)
-		},
+		Fn:                  func() error { return monitor(cfg, flags, logger, rspamc) },
+		IsRetryable:         neterr.IsRetryableError,
 		MaxRetriesSameError: 10,
 		RetryIntervals: []time.Duration{
 			3 * time.Second,
