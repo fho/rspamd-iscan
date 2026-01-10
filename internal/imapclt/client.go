@@ -186,9 +186,9 @@ func (c *Client) Upload(path, mailbox string, ts time.Time) error {
 	}
 
 	c.logger.Debug(
-		"uploaded messages to imap mailbox",
+		"uploaded message to imap mailbox",
 		lkMailbox, mailbox,
-		"event", "imap.messages_uploaded",
+		"event", "imap.message_uploaded",
 		"filepath", path,
 	)
 
@@ -206,7 +206,7 @@ func (c *Client) Upload(path, mailbox string, ts time.Time) error {
 func (c *Client) Monitor(mailbox string) (
 	_ <-chan *EventNewMessages, stop func() error, _ error,
 ) {
-	logger := c.logger.With("mailbox", mailbox)
+	logger := c.logger.With(lkMailbox, mailbox)
 	logger.Debug("starting to monitor mailbox for changes")
 
 	ch := make(chan *EventNewMessages, defChanBufSiz)
