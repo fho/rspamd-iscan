@@ -3,6 +3,7 @@ package neterr
 import (
 	"errors"
 	"io"
+	"net"
 	"syscall"
 )
 
@@ -15,7 +16,8 @@ func IsRetryableError(err error) bool {
 		errors.Is(err, syscall.ETIMEDOUT),
 		errors.Is(err, syscall.ENETUNREACH),
 		errors.Is(err, syscall.EHOSTUNREACH),
-		errors.Is(err, io.ErrUnexpectedEOF):
+		errors.Is(err, io.ErrUnexpectedEOF),
+		errors.Is(err, net.ErrClosed):
 		return true
 	default:
 		return false
