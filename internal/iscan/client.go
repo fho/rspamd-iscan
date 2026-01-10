@@ -273,6 +273,8 @@ func (c *Client) replaceWithModifiedMails(mails []*scannedMail) error {
 				"uploading scanned email to inbox failed, please find the original email in the backup mailbox!",
 				"event", "imap.msg_append_failed",
 				"filepath", mail.Path,
+				"mailbox.backup", c.backupMailbox,
+				"mailbox.inbox", c.inboxMailbox,
 			)
 
 			continue
@@ -291,7 +293,7 @@ func (c *Client) replaceWithModifiedMails(mails []*scannedMail) error {
 			)
 		}
 
-		logger.Info("moved message to backup mailbox and upload modified with scan results to inbox")
+		logger.Info("moved message to backup mailbox and uploaded modified message with scan results to inbox")
 	}
 
 	return errors.Join(errs...)
@@ -315,7 +317,7 @@ func (c *Client) downloadAndScan(msg *imapclt.Message) (*scannedMail, error) {
 
 		if err := os.Remove(tmpFile.Name()); err != nil {
 			c.logger.Error("deleting temporary file failed",
-				"error", err, "path", tmpFile.Name(),
+				"error", err, "filepath", tmpFile.Name(),
 				"event", "file.deletion_failed")
 		}
 	}
@@ -329,8 +331,8 @@ func (c *Client) downloadAndScan(msg *imapclt.Message) (*scannedMail, error) {
 	env := &msg.Envelope
 	logger := c.logger.With("mail.subject", env.Subject, "mail.uid", msg.UID)
 	logger.Debug("downloaded imap message",
-		"path", tmpFile.Name(),
-		"mail.envelope.messageID", env.MessageID,
+		"filepath", tmpFile.Name(),
+		"mail.envelope.message_id", env.MessageID,
 		"mail.envelope.from", env.From,
 		"mail.envelope.recipients", env.Recipients,
 	)
@@ -358,7 +360,7 @@ func (c *Client) downloadAndScan(msg *imapclt.Message) (*scannedMail, error) {
 	}
 
 	logger.Info("message scanned",
-		"scan.score", scanResult.Score, "scan.IsSpam", c.isSpam(scanResult),
+		"scan.score", scanResult.Score, "scan.is_spam", c.isSpam(scanResult),
 	)
 
 	return &scannedMail{
@@ -390,7 +392,7 @@ func (c *Client) ProcessScanBox() error {
 		if err != nil {
 			var errMalformed *imapclt.ErrMalformedMsg
 			if errors.As(err, &errMalformed) {
-				logger.Warn("email is malformed, skippng scanning",
+				logger.Warn("email is malformed, skipping scan",
 					"mail.uid", errMalformed.UID,
 					"error", err,
 					"event", "imap.msg_malformed",
@@ -461,7 +463,7 @@ func (c *Client) Monitor() error {
 		c.logger.Debug("waiting for mailbox update events")
 		select {
 		case <-time.After(c.learnInterval - time.Since(lastLearnAt)):
-			c.logger.Debug("learn timer expired, checking mailboxes for new messages")
+			c.logger.Debug("periodic timer expired, learning ham, spam and checking the scan mailbox")
 
 			if err := monitorCancelFn(); err != nil {
 				return err

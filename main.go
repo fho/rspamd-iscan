@@ -18,6 +18,10 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
+const (
+	maxRetriesSameError = 10
+)
+
 var (
 	version = "version-undefined"
 	commit  = "commit-undefined"
@@ -214,16 +218,17 @@ func run() error {
 	rspamc := rspamc.New(logger, cfg.RspamdURL, cfg.RspamdPassword)
 
 	if flags.once {
-		fmt.Printf("Running 1x and terminating (--once).\n\n")
+		logger.Info("running once and terminating (--once)")
 		return runOnceAndTerminate(cfg, flags, logger, rspamc)
 	}
 
-	fmt.Printf("Monitoring IMAP mailboxes continuously.\n\n")
+	logger.Info("monitoring IMAP mailboxes continuously, retrying on retryable errors",
+		"max_retries_same_error", maxRetriesSameError)
 
 	retryRunner := retry.Runner{
 		Fn:                  func() error { return monitor(cfg, flags, logger, rspamc) },
 		IsRetryable:         neterr.IsRetryableError,
-		MaxRetriesSameError: 10,
+		MaxRetriesSameError: maxRetriesSameError,
 		RetryIntervals: []time.Duration{
 			3 * time.Second,
 			30 * time.Second,
