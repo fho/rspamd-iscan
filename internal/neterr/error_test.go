@@ -13,3 +13,19 @@ func TestIsRetryableError_ConnectionRefused(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, true, IsRetryableError(err))
 }
+
+func TestIsRetryableError_ClosedConnection(t *testing.T) {
+	ln, err := net.Listen("tcp", "localhost:0")
+	assert.NoError(t, err)
+	defer ln.Close()
+
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	assert.NoError(t, err)
+
+	conn.Close()
+
+	_, err = conn.Write([]byte("test"))
+	t.Logf("error: %v", err)
+	assert.Error(t, err)
+	assert.Equal(t, true, IsRetryableError(err))
+}
