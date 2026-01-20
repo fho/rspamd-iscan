@@ -28,10 +28,11 @@ var (
 )
 
 type flags struct {
-	cfgPath      string
-	printVersion bool
-	once         bool
-	dryRun       bool
+	cfgPath              string
+	credentialsDirectory string
+	printVersion         bool
+	once                 bool
+	dryRun               bool
 }
 
 func mustParseFlags() *flags {
@@ -39,6 +40,8 @@ func mustParseFlags() *flags {
 
 	flag.StringVar(&result.cfgPath, "cfg-file", "/etc/rspamd-iscan/config.toml",
 		"Path to the rspamd-iscan config file")
+	flag.StringVar(&result.credentialsDirectory, "credentials-directory", os.Getenv("CREDENTIALS_DIRECTORY"),
+		"Directory containing credential files (defaults to $CREDENTIALS_DIRECTORY)")
 	flag.BoolVar(&result.printVersion, "version", false,
 		"print the version and exit")
 	flag.BoolVar(&result.once, "once", false,
@@ -209,6 +212,13 @@ func run() error {
 	cfg, err := config.FromFile(flags.cfgPath)
 	if err != nil {
 		return fmt.Errorf("loading config failed: %w", err)
+	}
+
+	if flags.credentialsDirectory != "" {
+		if err := cfg.LoadCredentialsFromDirectory(flags.credentialsDirectory); err != nil {
+			logger.Error("loading credentials from directory failed", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	cfg.SetDefaults()

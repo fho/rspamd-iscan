@@ -91,6 +91,27 @@ SpamThreshold       = 10.0
 LogIMAPData         = false
 ```
 
+### Credentials Directory
+
+Instead of storing sensitive credentials directly in the config file, you can use
+the `--credentials-directory` flag to specify a directory containing credential files.
+This is compatible with [systemd credentials](https://systemd.io/CREDENTIALS/).
+
+If the credentials directory is set, rspamd-iscan looks for files named after the
+config fields: `RspamdURL`, `RspamdPassword`, `ImapUser`, `ImapPassword`. If a file
+exists, its content overwrites the corresponding value from the TOML config.
+
+The `--credentials-directory` flag defaults to the `CREDENTIALS_DIRECTORY` environment
+variable if not specified.
+
+Example directory structure:
+```
+/run/credentials/rspamd-iscan/
+├── RspamdPassword
+├── ImapUser
+└── ImapPassword
+```
+
 ## Running
 
 ```bash

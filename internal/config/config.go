@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -93,4 +94,52 @@ func (c *Config) SetDefaults() {
 	if c.TempDir == "" {
 		c.TempDir = os.TempDir()
 	}
+}
+
+// LoadCredentialsFromDirectory reads credentials from files in the specified directory.
+// If a file exists, its content overwrites the corresponding config value.
+func (c *Config) LoadCredentialsFromDirectory(dir string) error {
+	if _, err := os.Stat(dir); err != nil {
+		return fmt.Errorf("credentials directory: %w", err)
+	}
+
+	credentials := []struct {
+		name   string
+		target *string
+	}{
+		{"RspamdURL", &c.RspamdURL},
+		{"RspamdPassword", &c.RspamdPassword},
+		{"ImapUser", &c.ImapUser},
+		{"ImapPassword", &c.ImapPassword},
+	}
+
+	for _, cred := range credentials {
+		path := filepath.Join(dir, cred.name)
+		value, err := readCredentialFile(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("reading credential %s: %w", cred.name, err)
+		}
+		*cred.target = value
+	}
+
+	return nil
+}
+
+func readCredentialFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+
+	// Trim trailing newlines because editors often add
+	// an empty newline at the end of the file
+	value := strings.TrimRight(string(data), "\r\n")
+
+	if value == "" {
+		return "", fmt.Errorf("file is empty")
+	}
+	return value, nil
 }
