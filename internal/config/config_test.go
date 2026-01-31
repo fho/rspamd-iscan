@@ -10,8 +10,8 @@ import (
 
 func TestLoadCredentialsFromDirectory(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "RspamdPassword"), []byte("secret123"), 0600)
-	_ = os.WriteFile(filepath.Join(dir, "ImapUser"), []byte("testuser"), 0600)
+	_ = os.WriteFile(filepath.Join(dir, "RspamdPassword"), []byte("secret123"), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, "ImapUser"), []byte("testuser"), 0o600)
 
 	cfg := &Config{
 		RspamdURL:      "http://original.url",
@@ -27,7 +27,7 @@ func TestLoadCredentialsFromDirectory(t *testing.T) {
 
 func TestLoadCredentialsFromDirectory_MissingFilesSkipped(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "RspamdPassword"), []byte("secret"), 0600)
+	_ = os.WriteFile(filepath.Join(dir, "RspamdPassword"), []byte("secret"), 0o600)
 
 	cfg := &Config{ImapPassword: "original"}
 
@@ -46,7 +46,7 @@ func TestLoadCredentialsFromDirectory_DirNotExistsError(t *testing.T) {
 
 func TestLoadCredentialsFromDirectory_EmptyFileError(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "RspamdPassword"), []byte(""), 0600)
+	_ = os.WriteFile(filepath.Join(dir, "RspamdPassword"), []byte(""), 0o600)
 
 	cfg := &Config{}
 	err := cfg.LoadCredentialsFromDirectory(dir)
@@ -56,8 +56,8 @@ func TestLoadCredentialsFromDirectory_EmptyFileError(t *testing.T) {
 
 func TestLoadCredentialsFromDirectory_PreservesSpaces(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "RspamdPassword"), []byte(" spaces \nnewline\n"), 0600)
-	_ = os.WriteFile(filepath.Join(dir, "ImapPassword"), []byte(" spaces \r\nnewline\n\r"), 0600)
+	_ = os.WriteFile(filepath.Join(dir, "RspamdPassword"), []byte(" spaces \nnewline\n"), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, "ImapPassword"), []byte(" spaces \r\nnewline\n\r"), 0o600)
 
 	cfg := &Config{}
 	err := cfg.LoadCredentialsFromDirectory(dir)
