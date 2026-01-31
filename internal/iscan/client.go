@@ -111,7 +111,6 @@ func (c *Client) ProcessSpam() error {
 }
 
 func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
-	//nolint:prealloc // number of mails is unknown before iterating
 	var processedMsgUIDs []uint32
 
 	logger := c.logger.With("mailbox.source", srcMailbox)
@@ -380,7 +379,6 @@ func envelopeToRspamcHdrs(env *imapclt.Envelope) *rspamc.MailHeaders {
 }
 
 func (c *Client) ProcessScanBox() error {
-	//nolint:prealloc // number of mails is unknown before iterating
 	var scannedMails []*scannedMail
 	var malformedMailsUIDs []uint32
 	var errs []error
