@@ -216,8 +216,7 @@ func run() error {
 
 	if flags.credentialsDirectory != "" {
 		if err := cfg.LoadCredentialsFromDirectory(flags.credentialsDirectory); err != nil {
-			logger.Error("loading credentials from directory failed", "error", err)
-			os.Exit(1)
+			return fmt.Errorf("loading credentials from directory (%s) failed: %w", flags.credentialsDirectory, err)
 		}
 	}
 
