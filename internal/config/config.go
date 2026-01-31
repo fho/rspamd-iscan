@@ -94,8 +94,9 @@ func (c *Config) SetDefaults() {
 	}
 }
 
-// LoadCredentialsFromDirectory reads credentials from files in the specified directory.
-// If a file exists, its content overwrites the corresponding config value.
+// LoadCredentialsFromDirectory reads credentials from files in the specified
+// directory. If a file exists, its content overwrite the corresponding config
+// value.
 func (c *Config) LoadCredentialsFromDirectory(dir string) error {
 	if _, err := os.Stat(dir); err != nil {
 		return fmt.Errorf("credentials directory: %w", err)
