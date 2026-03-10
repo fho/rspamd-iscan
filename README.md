@@ -32,6 +32,12 @@ Download and extract the binary from a [Release](https://github.com/fho/rspamd-i
 
 `go install github.com/fho/rspamd-iscan@latest`
 
+### Docker Image & Helm Chart
+
+A Docker image and a Helm Chart is kindly provided by
+[@JustinGuese](https://github.com/JustinGuese) and can be found
+[here](https://github.com/JustinGuese/rspamd-iscan/pkgs/container/rspamd-iscan).
+
 ## Configuration
 
 ### Rspamd
