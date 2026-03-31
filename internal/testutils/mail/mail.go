@@ -8,6 +8,8 @@ import (
 
 const (
 	SpamMailSubject = "Test spam mail (GTUBE)"
+	SuspiciousMailSubject = "Claim your FREE reward NOW!!!"
+	SuspiciousMailRewrittenSubject = "[SPAM] Claim your FREE reward NOW!!!"
 	HamMailSubject  = "An RFC 822 formatted message"
 )
 
@@ -47,6 +49,11 @@ func TestHamMailPath(t *testing.T) string {
 func TestSpamMailPath(t *testing.T) string {
 	proot := findProjectRoot(t)
 	return filepath.Join(proot, "internal", "testutils", "mail", "testdata", "spam.mail")
+}
+
+func TestSuspiciousMailPath(t *testing.T) string {
+	proot := findProjectRoot(t)
+	return filepath.Join(proot, "internal", "testutils", "mail", "testdata", "suspicious.mail")
 }
 
 func TestMalformedMailPath(t *testing.T) string {
