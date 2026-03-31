@@ -21,6 +21,11 @@ var SpamCheckResult = rspamc.CheckResult{
 	Score: 100,
 }
 
+var SubjectRewriteResult = rspamc.CheckResult{
+	Score:   6,
+	Subject: "[SPAM] Claim your FREE reward NOW!!!",
+}
+
 // func CheckFnAlwaysSpam(context.Context, io.Reader, *rspamc.MailHeaders) (
 // 	*rspamc.CheckResult, error,
 // ) {
@@ -33,6 +38,8 @@ func CheckFnDefault(_ context.Context, _ io.Reader, hdr *rspamc.MailHeaders) (
 	switch hdr.Subject {
 	case "Test spam mail (GTUBE)":
 		return &SpamCheckResult, nil
+	case "Claim your FREE reward NOW!!!":
+		return &SubjectRewriteResult, nil
 	default:
 		return &rspamc.CheckResult{}, nil
 	}
