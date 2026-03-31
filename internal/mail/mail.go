@@ -162,6 +162,87 @@ func addHeaders(in io.Reader, out io.Writer, hdrs []byte) error {
 	return nil
 }
 
+// ReplaceHeader replaces the first occurrence of a header in the e-mail at [path].
+// The file must be in RFC2822 format.
+func ReplaceHeader(path string, hdr Header) error {
+	tmpfileFd, err := os.CreateTemp("", filepath.Base(path))
+	if err != nil {
+		return err
+	}
+	emailFd, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer emailFd.Close()
+	err = replaceHeader(emailFd, tmpfileFd, hdr)
+	if err != nil {
+		_ = tmpfileFd.Close()
+		delErr := os.Remove(tmpfileFd.Name())
+		return errors.Join(err, delErr)
+	}
+	if err := tmpfileFd.Close(); err != nil {
+		delErr := os.Remove(tmpfileFd.Name())
+		return errors.Join(
+			fmt.Errorf("writing tempfile failed: %w", err),
+			delErr,
+		)
+	}
+	return os.Rename(tmpfileFd.Name(), path)
+}
+
+// replaceHeader reads an email from in, replaces the first occurrence of the
+// named header and writes the result to out.
+func replaceHeader(in io.Reader, out io.Writer, hdr Header) error {
+	emailBr := bufio.NewReader(in)
+	tmpfileBw := bufio.NewWriter(out)
+
+	prefix := []byte(hdr.Name + ":")
+	replacement := []byte(hdr.Name + ": " + hdr.Body + "\r\n")
+	replaced := false
+
+	lineScanner := bufio.NewScanner(emailBr)
+	lineScanner.Buffer(make([]byte, 4096), 4096)
+	for lineScanner.Scan() {
+		line := lineScanner.Bytes()
+
+		// Blank line signals end of headers (Scanner strips \r\n, so empty == \r\n line)
+		if len(line) == 0 {
+			if !replaced {
+				return fmt.Errorf("header %q not found", hdr.Name)
+			}
+			if _, err := tmpfileBw.Write([]byte("\r\n")); err != nil {
+				return fmt.Errorf("writing failed: %w", err)
+			}
+			break
+		}
+
+		if !replaced && bytes.HasPrefix(bytes.ToUpper(line), bytes.ToUpper(prefix)) {
+			if _, err := tmpfileBw.Write(replacement); err != nil {
+				return fmt.Errorf("writing failed: %w", err)
+			}
+			replaced = true
+		} else {
+			if _, err := tmpfileBw.Write(line); err != nil {
+				return fmt.Errorf("copying data failed: %w", err)
+			}
+			if _, err := tmpfileBw.Write([]byte("\r\n")); err != nil {
+				return fmt.Errorf("copying data failed: %w", err)
+			}
+		}
+	}
+	if err := lineScanner.Err(); err != nil {
+		return fmt.Errorf("reading email failed: %w", err)
+	}
+
+	if _, err := io.Copy(tmpfileBw, emailBr); err != nil {
+		return fmt.Errorf("copying email failed: %w", err)
+	}
+	if err := tmpfileBw.Flush(); err != nil {
+		return fmt.Errorf("flushing buffer failed: %w", err)
+	}
+	return nil
+}
+
 // strEmailHdrCharsOnly removes all non-printable ASCII chars and colons from s
 func strEmailHdrCharsOnly(s string) string {
 	return strings.Map(func(r rune) rune {
