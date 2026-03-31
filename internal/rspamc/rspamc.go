@@ -110,9 +110,10 @@ type CheckResult struct {
 	Score     float32            `json:"score"`
 	IsSkipped bool               `json:"is_skipped"`
 	Symbols   map[string]*Symbol `json:"symbols"`
+	Subject   string             `json:"subject,omitempty"`
 }
 
-// https://rspamd.com/doc/architecture/protocol.html#protocol-basics
+// https://docs.rspamd.com/developers/protocol#protocol-basics
 type Symbol struct {
 	Name  string  `json:"name"`
 	Score float32 `json:"score"`

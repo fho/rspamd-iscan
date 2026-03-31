@@ -227,6 +227,17 @@ func (c *Client) isSpam(r *rspamc.CheckResult) bool {
 	return r.Score >= c.spamTreshold
 }
 
+func handleSubjectRewrite(env *imapclt.Envelope, scanResult *rspamc.CheckResult, logger *slog.Logger) {
+	if scanResult.Subject != "" && scanResult.Subject != env.Subject {
+		old := env.Subject
+		env.Subject = scanResult.Subject
+		logger.Debug("rspamd returned modified subject",
+			"old_subject", old,
+			"new_subject", env.Subject,
+		)
+	}
+}
+
 // replaceWithModifiedMails uploads mails to the spam or inbox mailbox, depending on their
 // spam score.
 // The original email is moved to the backup mailbox.
@@ -352,6 +363,8 @@ func (c *Client) downloadAndScan(msg *imapclt.Message) (*scannedMail, error) {
 		errCleanupfn()
 		return nil, fmt.Errorf("closing file of downloaded mail failed: %w", err)
 	}
+
+	handleSubjectRewrite(env, scanResult, logger)
 
 	err = addScanResultHeaders(tmpFile.Name(), scanResult)
 	if err != nil {
