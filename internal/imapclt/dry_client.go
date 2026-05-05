@@ -29,3 +29,11 @@ func (c *DryClient) Move(uids []uint32, mailbox string) error {
 	)
 	return nil
 }
+
+// MarkSeen logs a debug message and returns nil
+func (c *DryClient) MarkSeen(uids []uint32) error {
+	c.logger.Debug("dry-client: skipping marking messages as seen",
+		"count", len(uids),
+	)
+	return nil
+}

@@ -136,18 +136,19 @@ func newIscanClient(
 	imapClt iscan.IMAPClient,
 ) (*iscan.Client, error) {
 	iscanCfg := iscan.Config{
-		ScanMailbox:           cfg.ScanMailbox,
-		InboxMailbox:          cfg.InboxMailbox,
-		HamMailbox:            cfg.HamMailbox,
-		SpamMailboxName:       cfg.SpamMailbox,
-		UndetectedMailboxName: cfg.UndetectedMailbox,
-		BackupMailbox:         cfg.BackupMailbox,
-		SpamTreshold:          cfg.SpamThreshold,
-		TempDir:               cfg.TempDir,
-		KeepTempFiles:         cfg.KeepTempFiles,
-		Logger:                logger,
-		Rspamc:                rspamc,
-		IMAPClient:            imapClt,
+		ScanMailbox:             cfg.ScanMailbox,
+		InboxMailbox:            cfg.InboxMailbox,
+		HamMailbox:              cfg.HamMailbox,
+		SpamMailboxName:         cfg.SpamMailbox,
+		UndetectedMailboxName:   cfg.UndetectedMailbox,
+		BackupMailbox:           cfg.BackupMailbox,
+		SpamTreshold:            cfg.SpamThreshold,
+		TempDir:                 cfg.TempDir,
+		KeepTempFiles:           cfg.KeepTempFiles,
+		MarkLearnedAsSpamAsRead: cfg.MarkLearnedAsSpamAsRead,
+		Logger:                  logger,
+		Rspamc:                  rspamc,
+		IMAPClient:              imapClt,
 	}
 
 	return iscan.NewClient(&iscanCfg)

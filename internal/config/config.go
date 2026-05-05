@@ -10,21 +10,22 @@ import (
 )
 
 type Config struct {
-	RspamdURL         string
-	RspamdPassword    string
-	ImapAddr          string
-	ImapUser          string
-	ImapPassword      string
-	InboxMailbox      string
-	SpamMailbox       string
-	ScanMailbox       string
-	HamMailbox        string
-	BackupMailbox     string
-	UndetectedMailbox string
-	SpamThreshold     float32
-	TempDir           string
-	KeepTempFiles     bool
-	LogIMAPData       bool
+	RspamdURL               string
+	RspamdPassword          string
+	ImapAddr                string
+	ImapUser                string
+	ImapPassword            string
+	InboxMailbox            string
+	SpamMailbox             string
+	ScanMailbox             string
+	HamMailbox              string
+	BackupMailbox           string
+	UndetectedMailbox       string
+	SpamThreshold           float32
+	TempDir                 string
+	KeepTempFiles           bool
+	LogIMAPData             bool
+	MarkLearnedAsSpamAsRead bool
 }
 
 func (c *Config) String() string {
@@ -63,6 +64,7 @@ func (c *Config) String() string {
 	printKv("Temporary Directory", c.TempDir)
 	printKv("Keep Temporary Files", c.KeepTempFiles)
 	printKv("Log IMAP Data", c.LogIMAPData)
+	printKv("Mark Undetected As Read", c.MarkLearnedAsSpamAsRead)
 
 	sb.WriteRune('\n')
 	fmt.Fprintf(&sb, "Mails in %q are scanned and backuped to %q.\n", c.ScanMailbox, c.BackupMailbox)
