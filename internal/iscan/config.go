@@ -14,6 +14,7 @@ import (
 type IMAPClient interface {
 	Close() error
 	Connect() error
+	MarkSeen(uids []uint32) error
 	Messages(mailbox string) iter.Seq2[*imapclt.Message, error]
 	Monitor(mailbox string) (<-chan *imapclt.EventNewMessages, func() error, error)
 	Move(uids []uint32, mailbox string) error
@@ -30,6 +31,8 @@ type Config struct {
 
 	TempDir       string
 	KeepTempFiles bool
+
+	MarkLearnedAsSpamAsRead bool
 
 	SpamTreshold float32
 
