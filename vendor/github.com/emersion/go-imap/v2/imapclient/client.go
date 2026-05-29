@@ -385,6 +385,15 @@ func (c *Client) Mailbox() *SelectedMailbox {
 	return c.mailbox
 }
 
+// Closed returns a channel that is closed when the connection is closed.
+//
+// This channel cannot be used to reliably determine whether a connection is healthy. If
+// the underlying connection times out, the channel will be closed eventually, but not
+// immediately. To check whether the connection is healthy, send a command (such as Noop).
+func (c *Client) Closed() <-chan struct{} {
+	return c.decCh
+}
+
 // Close immediately closes the connection.
 func (c *Client) Close() error {
 	c.mutex.Lock()
@@ -1080,7 +1089,7 @@ func (c *Client) Subscribe(mailbox string) *Command {
 	return cmd
 }
 
-// Subscribe sends an UNSUBSCRIBE command.
+// Unsubscribe sends an UNSUBSCRIBE command.
 func (c *Client) Unsubscribe(mailbox string) *Command {
 	cmd := &Command{}
 	enc := c.beginCommand("UNSUBSCRIBE", cmd)

@@ -975,9 +975,9 @@ func readBodyType1part(dec *imapwire.Decoder, typ string, options *Options) (*im
 	}
 
 	// Content-Transfer-Encoding should always be set, but some non-standard
-	// servers leave it NIL. Default to 7BIT.
+	// servers leave it NIL. Default to 7bit.
 	if bs.Encoding == "" {
-		bs.Encoding = "7BIT"
+		bs.Encoding = "7bit"
 	}
 
 	// TODO: handle errors
