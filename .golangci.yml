@@ -13,6 +13,7 @@ linters:
     - govet
     - ineffassign
     - misspell
+    - modernize
     - nolintlint
     - nosprintfhostport
     - prealloc
