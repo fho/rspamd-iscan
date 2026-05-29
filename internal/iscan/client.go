@@ -119,8 +119,7 @@ func (c *Client) learn(srcMailbox, destMailbox string, learnFn learnFn) error {
 
 	for msg, err := range c.clt.Messages(srcMailbox) {
 		if err != nil {
-			var errMalformed *imapclt.ErrMalformedMsg
-			if errors.As(err, &errMalformed) {
+			if errMalformed, ok := errors.AsType[*imapclt.ErrMalformedMsg](err); ok {
 				logger.Warn("skipping malformed message",
 					"mail.uid", errMalformed.UID,
 					"error", err,
@@ -388,8 +387,7 @@ func (c *Client) ProcessScanBox() error {
 
 	for msg, err := range c.clt.Messages(c.scanMailbox) {
 		if err != nil {
-			var errMalformed *imapclt.ErrMalformedMsg
-			if errors.As(err, &errMalformed) {
+			if errMalformed, ok := errors.AsType[*imapclt.ErrMalformedMsg](err); ok {
 				logger.Warn("email is malformed, skipping scan",
 					"mail.uid", errMalformed.UID,
 					"error", err,
