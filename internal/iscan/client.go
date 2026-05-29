@@ -265,7 +265,7 @@ func (c *Client) replaceWithModifiedMails(mails []*scannedMail) error {
 		err = c.clt.Upload(mail.Path, mbox, mail.Envelope.Date)
 		if err != nil {
 			errs = append(errs, fmt.Errorf(
-				"uploading email %q (%s) (%s) to %s failed: %w",
+				"uploading email %d (%s) (%s) to %s failed: %w",
 				mail.UID, mail.Envelope.Subject, mail.Path, mbox, err,
 			))
 			logger.Warn(
