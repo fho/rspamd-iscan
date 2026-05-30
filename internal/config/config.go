@@ -26,13 +26,15 @@ type Config struct {
 	KeepTempFiles           bool
 	LogIMAPData             bool
 	MarkLearnedAsSpamAsRead bool
+	LogLevel                string
 }
 
 // New returns an new config initialized with default values
 func New() *Config {
 	return &Config{
-		TempDir:                 os.TempDir(),
+		LogLevel:                "info",
 		MarkLearnedAsSpamAsRead: true,
+		TempDir:                 os.TempDir(),
 	}
 }
 
@@ -69,10 +71,12 @@ func (c *Config) String() string {
 	printKv("Spam Mailbox", c.SpamMailbox)
 	printKv("Undetected Mailbox", c.UndetectedMailbox)
 	printKv("Backup Mailbox", c.BackupMailbox)
+	printKv("Mark Learned Spam as Read", c.MarkLearnedAsSpamAsRead)
+
 	printKv("Temporary Directory", c.TempDir)
 	printKv("Keep Temporary Files", c.KeepTempFiles)
 	printKv("Log IMAP Data", c.LogIMAPData)
-	printKv("Mark Learned Spam as Read", c.MarkLearnedAsSpamAsRead)
+	printKv("Log Level", c.LogLevel)
 
 	sb.WriteRune('\n')
 	fmt.Fprintf(&sb, "Mails in %q are scanned and backuped to %q.\n", c.ScanMailbox, c.BackupMailbox)
