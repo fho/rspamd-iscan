@@ -87,7 +87,7 @@ BackupMailbox           = "Backup"
 # headers
 TempDir                 = "/tmp"
 # Set KeepTempFiles to false to delete temporary files after use immediately
-KeepTempFiles           = true
+KeepTempFiles           = false
 ScanMailbox             = "Unscanned"
 # Mails with a higher or equal rspamd score than SpamThreshold are moved to
 # SpamMailbox, others to HamMailbox
