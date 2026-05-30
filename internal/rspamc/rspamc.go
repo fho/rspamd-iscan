@@ -46,6 +46,11 @@ func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, 
 		return nil
 	}
 
+	defer func() {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 512*1024))
+		_ = resp.Body.Close()
+	}()
+
 	if logger.Enabled(ctx, slog.LevelDebug) {
 		respDump, err := httputil.DumpResponse(resp, true)
 		if err != nil {
@@ -53,6 +58,7 @@ func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, 
 				"error", err,
 			)
 		}
+
 		logger.Debug("received http-response", "response", string(respDump))
 	}
 
@@ -75,6 +81,7 @@ func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, 
 		if err != nil {
 			logger.Error("rspamc reading http error body failed", "error", err)
 		}
+
 		if len(buf) != 0 {
 			logger.Debug("response body is not processed", "body", string(buf))
 		}
