@@ -77,4 +77,5 @@ func TestDefaults(t *testing.T) {
 
 	assert.Equal(t, cfg.TempDir, os.TempDir())
 	assert.Equal(t, cfg.MarkLearnedAsSpamAsRead, true)
+	assert.Equal(t, cfg.LogLevel, "info")
 }

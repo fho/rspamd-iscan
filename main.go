@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -60,9 +61,9 @@ func mustParseFlags() *flags {
 	return &result
 }
 
-func configureLogger() *slog.Logger {
+func configureLogger(loglevel slog.Level) *slog.Logger {
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: loglevel,
 		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
 			// do not log timestamp, rspamd-iscan is normally run as
 			// daemon, journald/syslog already adds timestamps
@@ -201,6 +202,21 @@ func monitor(
 	return nil
 }
 
+func toSlogLevel(lvl string) (slog.Level, error) {
+	switch strings.ToLower(lvl) {
+	case "debug":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	default:
+		return 0, fmt.Errorf("unsupported log level: %q", lvl)
+	}
+}
+
 func run() error {
 	flags := mustParseFlags()
 	if flags.printVersion {
@@ -208,12 +224,16 @@ func run() error {
 		return nil
 	}
 
-	logger := configureLogger()
-
 	cfg, err := config.FromFile(flags.cfgPath)
 	if err != nil {
 		return fmt.Errorf("loading config failed: %w", err)
 	}
+
+	loglvl, err := toSlogLevel(cfg.LogLevel)
+	if err != nil {
+		return err
+	}
+	logger := configureLogger(loglvl)
 
 	if flags.credentialsDirectory != "" {
 		if err := cfg.LoadCredentialsFromDirectory(flags.credentialsDirectory); err != nil {

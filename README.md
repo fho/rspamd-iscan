@@ -92,6 +92,9 @@ ScanMailbox             = "Unscanned"
 # Mails with a higher or equal rspamd score than SpamThreshold are moved to
 # SpamMailbox, others to HamMailbox
 SpamThreshold           = 10.0
+# Minimal severity of log messages to be printed,
+# supported levels: debug, info, warn, error
+LogLevel                = "info"
 # Raw incoming and outgoing IMAP data is logged with debug log level.
 # The logged data can contain sensitive information, like credentials.
 LogIMAPData             = false
