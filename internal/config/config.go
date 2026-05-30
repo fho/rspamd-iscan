@@ -31,7 +31,8 @@ type Config struct {
 // New returns an new config initialized with default values
 func New() *Config {
 	return &Config{
-		TempDir: os.TempDir(),
+		TempDir:                 os.TempDir(),
+		MarkLearnedAsSpamAsRead: true,
 	}
 }
 

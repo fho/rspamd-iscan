@@ -96,14 +96,14 @@ SpamThreshold           = 10.0
 # The logged data can contain sensitive information, like credentials.
 LogIMAPData             = false
 # Mark mails in UndetectedMailbox as read when moving them to SpamMailbox.
-MarkLearnedAsSpamAsRead = false
+MarkLearnedAsSpamAsRead = true
 ```
 
 ### Credentials Directory
 
 Instead of storing sensitive credentials directly in the config file, you can use
-the `--credentials-directory` flag to specify a directory containing credential files.
-This is compatible with [systemd credentials](https://systemd.io/CREDENTIALS/).
+the `--credentials-directory` flag to specify a directory containing credential
+files. This is compatible with [systemd credentials](https://systemd.io/CREDENTIALS/).
 
 If the credentials directory is set, rspamd-iscan looks for files named after the
 config fields: `RspamdURL`, `RspamdPassword`, `ImapUser`, `ImapPassword`. If a file
