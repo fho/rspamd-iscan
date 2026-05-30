@@ -160,7 +160,8 @@ func (c *Client) learn(srcMailbox, destMailbox string, markAsSeen bool, learnFn 
 
 	if markAsSeen {
 		if err := c.clt.MarkSeen(processedMsgUIDs); err != nil {
-			return fmt.Errorf("marking messages as seen failed: %w", err)
+			logger.Warn("marking learned message as seen failed",
+				"error", err)
 		}
 	}
 
