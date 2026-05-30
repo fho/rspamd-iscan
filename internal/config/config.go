@@ -28,6 +28,13 @@ type Config struct {
 	MarkLearnedAsSpamAsRead bool
 }
 
+// New returns an new config initialized with default values
+func New() *Config {
+	return &Config{
+		TempDir: os.TempDir(),
+	}
+}
+
 func (c *Config) String() string {
 	const unset = "UNSET"
 	const hiddenPasswd = "***"
@@ -79,23 +86,18 @@ func (c *Config) String() string {
 }
 
 func FromFile(path string) (*Config, error) {
-	var result Config
+	result := New()
+
 	buf, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	err = toml.Unmarshal(buf, &result)
+	err = toml.Unmarshal(buf, result)
 	if err != nil {
 		return nil, err
 	}
 
-	return &result, nil
-}
-
-func (c *Config) SetDefaults() {
-	if c.TempDir == "" {
-		c.TempDir = os.TempDir()
-	}
+	return result, nil
 }
 
 // LoadCredentialsFromDirectory reads credentials from files in the specified
