@@ -221,7 +221,6 @@ func run() error {
 		}
 	}
 
-	cfg.SetDefaults()
 	fmt.Print(cfg.String())
 
 	// TODO: allow passing all attrs as single URL to rspamc http client
