@@ -55,3 +55,35 @@ func TestAddHeaders(t *testing.T) {
 		t.Errorf("Got:\n%q\nExpected:\n%q\n", string(result), expected)
 	}
 }
+
+func TestReplaceHeader(t *testing.T) {
+	const expected = "From: newperson@example.com\r\nTo: someone_else@example.com\r\nSubject: An RFC 822 formatted message\r\n\r\nThis is the plain text body of the message. Note the blank line\r\nbetween the header information and the body of the message.\r\n"
+ 
+	tmpdir := t.TempDir()
+	fd, err := os.CreateTemp(tmpdir, t.Name())
+	AssertNoErr(t, err)
+ 
+	exampleFd, err := os.Open(mail.TestHamMailPath(t))
+	AssertNoErr(t, err)
+ 
+	_, err = io.Copy(fd, exampleFd)
+	AssertNoErr(t, err)
+ 
+	err = fd.Close()
+	AssertNoErr(t, err)
+	_ = exampleFd.Close()
+ 
+	// Replace the From header
+	err = ReplaceHeader(fd.Name(), Header{
+		Name: "From",
+		Body: "newperson@example.com",
+	})
+	AssertNoErr(t, err)
+ 
+	result, err := os.ReadFile(fd.Name())
+	AssertNoErr(t, err)
+ 
+	if !bytes.Equal(result, []byte(expected)) {
+		t.Errorf("Got:\n%q\nExpected:\n%q\n", string(result), expected)
+	}
+}
