@@ -163,7 +163,6 @@ func addHeaders(in io.Reader, out io.Writer, hdrs []byte) error {
 }
 
 // ReplaceHeader replaces the first occurrence of a header in the e-mail at [path].
-// The file must be in RFC2822 format.
 func ReplaceHeader(path string, hdr Header) error {
 	tmpfileFd, err := os.CreateTemp("", filepath.Base(path))
 	if err != nil {
@@ -191,7 +190,7 @@ func ReplaceHeader(path string, hdr Header) error {
 }
 
 // replaceHeader reads an email from in, replaces the first occurrence of the
-// named header and writes the result to out.
+// named header (with RFC5322 multiline folding support) and writes the result to out.
 func replaceHeader(in io.Reader, out io.Writer, hdr Header) error {
 	emailBr := bufio.NewReader(in)
 	tmpfileBw := bufio.NewWriter(out)
@@ -199,13 +198,16 @@ func replaceHeader(in io.Reader, out io.Writer, hdr Header) error {
 	prefix := []byte(hdr.Name + ":")
 	replacement := []byte(hdr.Name + ": " + hdr.Body + "\r\n")
 	replaced := false
+	skipContinuation := false // true when skipping FWS continuation lines of the old header
+	headerEnded := false      // true after the blank line separator is found
 
 	lineScanner := bufio.NewScanner(emailBr)
-	lineScanner.Buffer(make([]byte, 4096), 4096)
+	lineScanner.Buffer(make([]byte, 0, 4096), 16384)
+
 	for lineScanner.Scan() {
 		line := lineScanner.Bytes()
 
-		// Blank line signals end of headers (Scanner strips \r\n, so empty == \r\n line)
+		// Blank line signals end of headers (Scanner strips \r\n, so empty == \r\n\r\n)
 		if len(line) == 0 {
 			if !replaced {
 				return fmt.Errorf("header %q not found", hdr.Name)
@@ -213,15 +215,40 @@ func replaceHeader(in io.Reader, out io.Writer, hdr Header) error {
 			if _, err := tmpfileBw.Write([]byte("\r\n")); err != nil {
 				return fmt.Errorf("writing failed: %w", err)
 			}
-			break
+			headerEnded = true
+			continue // Continue to copy body lines
+		}
+
+		// Once headers have ended, we're in the body - just copy lines as-is
+		if headerEnded {
+			if _, err := tmpfileBw.Write(line); err != nil {
+				return fmt.Errorf("copying data failed: %w", err)
+			}
+			if _, err := tmpfileBw.Write([]byte("\r\n")); err != nil {
+				return fmt.Errorf("copying data failed: %w", err)
+			}
+			continue
+		}
+
+		// Skip continuation lines, if currently inside the replaced header block.
+		// Per RFC5322 §2.2.3, folded lines must start with whitespace (FWS).
+		if skipContinuation {
+			if len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
+				continue // Skip physical continuation line
+			} else {
+				skipContinuation = false // Stop skipping; this line belongs to the next section/header
+			}
 		}
 
 		if !replaced && bytes.HasPrefix(bytes.ToUpper(line), bytes.ToUpper(prefix)) {
+			// Found the target header (first line of a possible folded sequence)
+			skipContinuation = true
 			if _, err := tmpfileBw.Write(replacement); err != nil {
 				return fmt.Errorf("writing failed: %w", err)
 			}
 			replaced = true
 		} else {
+			// Normal line, copy it to output
 			if _, err := tmpfileBw.Write(line); err != nil {
 				return fmt.Errorf("copying data failed: %w", err)
 			}
@@ -234,9 +261,6 @@ func replaceHeader(in io.Reader, out io.Writer, hdr Header) error {
 		return fmt.Errorf("reading email failed: %w", err)
 	}
 
-	if _, err := io.Copy(tmpfileBw, emailBr); err != nil {
-		return fmt.Errorf("copying email failed: %w", err)
-	}
 	if err := tmpfileBw.Flush(); err != nil {
 		return fmt.Errorf("flushing buffer failed: %w", err)
 	}
