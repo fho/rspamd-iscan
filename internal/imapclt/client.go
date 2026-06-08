@@ -279,6 +279,32 @@ func (c *Client) Move(uids []uint32, mailbox string) error {
 	return err
 }
 
+// MarkSeen adds the \Seen flag to the messages with the given UIDs in the
+// currently selected mailbox.
+func (c *Client) MarkSeen(uids []uint32) error {
+	if len(uids) == 0 {
+		return errors.New("no uids were given")
+	}
+
+	storeCmd := c.clt.Store(asUIDSet(uids), &imap.StoreFlags{
+		Op:     imap.StoreFlagsAdd,
+		Silent: true,
+		Flags:  []imap.Flag{imap.FlagSeen},
+	}, nil)
+
+	if err := storeCmd.Close(); err != nil {
+		return fmt.Errorf("marking messages as seen failed: %w", err)
+	}
+
+	c.logger.Debug(
+		"marked imap messages as seen",
+		"count", len(uids),
+		"event", "imap.messages_marked_seen",
+	)
+
+	return nil
+}
+
 func (c *Client) setNewMessagesCH(ch chan<- *EventNewMessages) {
 	c.mu.Lock()
 	c.newMessagesCh = ch

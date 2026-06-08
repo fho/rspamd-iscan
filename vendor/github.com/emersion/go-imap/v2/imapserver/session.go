@@ -114,3 +114,13 @@ type SessionUnauthenticate interface {
 	// Authenticated state
 	Unauthenticate() error
 }
+
+// SessionAppendLimit is an IMAP session which has the same APPEND limit for
+// all mailboxes.
+type SessionAppendLimit interface {
+	Session
+
+	// AppendLimit returns the maximum size in bytes that can be uploaded to
+	// this server in an APPEND command.
+	AppendLimit() uint32
+}

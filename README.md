@@ -73,35 +73,40 @@ Create a new configuration file with the following content and adapt it to your
 setup:
 
 ```toml
-RspamdURL           = "http://192.168.178.2:11334"
-RspamdPassword      = "iwonttellyou"
-ImapAddr            = "my-imap-server:993"
-ImapUser            = "rickdeckard"
-ImapPassword        = "zhora"
-InboxMailbox        = "INBOX"
-SpamMailbox         = "Spam"
-HamMailbox          = "Ham"
-UndetectedMailbox   = "Undetected"
-BackupMailbox       = "Backup"
+RspamdURL               = "http://192.168.178.2:11334"
+RspamdPassword          = "iwonttellyou"
+ImapAddr                = "my-imap-server:993"
+ImapUser                = "rickdeckard"
+ImapPassword            = "zhora"
+InboxMailbox            = "INBOX"
+SpamMailbox             = "Spam"
+HamMailbox              = "Ham"
+UndetectedMailbox       = "Undetected"
+BackupMailbox           = "Backup"
 # TempDir stores downloaded mails and their modified variants with added spam
 # headers
-TempDir             = "/tmp"
+TempDir                 = "/tmp"
 # Set KeepTempFiles to false to delete temporary files after use immediately
-KeepTempFiles       = true
-ScanMailbox         = "Unscanned"
+KeepTempFiles           = false
+ScanMailbox             = "Unscanned"
 # Mails with a higher or equal rspamd score than SpamThreshold are moved to
 # SpamMailbox, others to HamMailbox
-SpamThreshold       = 10.0
+SpamThreshold           = 10.0
+# Minimal severity of log messages to be printed,
+# supported levels: debug, info, warn, error
+LogLevel                = "info"
 # Raw incoming and outgoing IMAP data is logged with debug log level.
 # The logged data can contain sensitive information, like credentials.
-LogIMAPData         = false
+LogIMAPData             = false
+# Mark mails in UndetectedMailbox as read when moving them to SpamMailbox.
+MarkLearnedAsSpamAsRead = true
 ```
 
 ### Credentials Directory
 
 Instead of storing sensitive credentials directly in the config file, you can use
-the `--credentials-directory` flag to specify a directory containing credential files.
-This is compatible with [systemd credentials](https://systemd.io/CREDENTIALS/).
+the `--credentials-directory` flag to specify a directory containing credential
+files. This is compatible with [systemd credentials](https://systemd.io/CREDENTIALS/).
 
 If the credentials directory is set, rspamd-iscan looks for files named after the
 config fields: `RspamdURL`, `RspamdPassword`, `ImapUser`, `ImapPassword`. If a file

@@ -65,3 +65,17 @@ func TestLoadCredentialsFromDirectory_PreservesSpaces(t *testing.T) {
 	assert.Equal(t, " spaces \nnewline", cfg.RspamdPassword)
 	assert.Equal(t, " spaces \r\nnewline", cfg.ImapPassword)
 }
+
+func TestDefaults(t *testing.T) {
+	dir := t.TempDir()
+
+	f := filepath.Join(dir, "cfg.toml")
+	assert.NoError(t, os.WriteFile(f, []byte{}, 0o600))
+
+	cfg, err := FromFile(f)
+	assert.NoError(t, err)
+
+	assert.Equal(t, cfg.TempDir, os.TempDir())
+	assert.Equal(t, cfg.MarkLearnedAsSpamAsRead, true)
+	assert.Equal(t, cfg.LogLevel, "info")
+}

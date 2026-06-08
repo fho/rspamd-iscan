@@ -10,21 +10,32 @@ import (
 )
 
 type Config struct {
-	RspamdURL         string
-	RspamdPassword    string
-	ImapAddr          string
-	ImapUser          string
-	ImapPassword      string
-	InboxMailbox      string
-	SpamMailbox       string
-	ScanMailbox       string
-	HamMailbox        string
-	BackupMailbox     string
-	UndetectedMailbox string
-	SpamThreshold     float32
-	TempDir           string
-	KeepTempFiles     bool
-	LogIMAPData       bool
+	RspamdURL               string
+	RspamdPassword          string
+	ImapAddr                string
+	ImapUser                string
+	ImapPassword            string
+	InboxMailbox            string
+	SpamMailbox             string
+	ScanMailbox             string
+	HamMailbox              string
+	BackupMailbox           string
+	UndetectedMailbox       string
+	SpamThreshold           float32
+	TempDir                 string
+	KeepTempFiles           bool
+	LogIMAPData             bool
+	MarkLearnedAsSpamAsRead bool
+	LogLevel                string
+}
+
+// New returns an new config initialized with default values
+func New() *Config {
+	return &Config{
+		LogLevel:                "info",
+		MarkLearnedAsSpamAsRead: true,
+		TempDir:                 os.TempDir(),
+	}
 }
 
 func (c *Config) String() string {
@@ -60,9 +71,12 @@ func (c *Config) String() string {
 	printKv("Spam Mailbox", c.SpamMailbox)
 	printKv("Undetected Mailbox", c.UndetectedMailbox)
 	printKv("Backup Mailbox", c.BackupMailbox)
+	printKv("Mark Learned Spam as Read", c.MarkLearnedAsSpamAsRead)
+
 	printKv("Temporary Directory", c.TempDir)
 	printKv("Keep Temporary Files", c.KeepTempFiles)
 	printKv("Log IMAP Data", c.LogIMAPData)
+	printKv("Log Level", c.LogLevel)
 
 	sb.WriteRune('\n')
 	fmt.Fprintf(&sb, "Mails in %q are scanned and backuped to %q.\n", c.ScanMailbox, c.BackupMailbox)
@@ -77,23 +91,18 @@ func (c *Config) String() string {
 }
 
 func FromFile(path string) (*Config, error) {
-	var result Config
+	result := New()
+
 	buf, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	err = toml.Unmarshal(buf, &result)
+	err = toml.Unmarshal(buf, result)
 	if err != nil {
 		return nil, err
 	}
 
-	return &result, nil
-}
-
-func (c *Config) SetDefaults() {
-	if c.TempDir == "" {
-		c.TempDir = os.TempDir()
-	}
+	return result, nil
 }
 
 // LoadCredentialsFromDirectory reads credentials from files in the specified

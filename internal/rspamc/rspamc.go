@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httputil"
 )
 
 type Client struct {
@@ -45,16 +46,27 @@ func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, 
 		return nil
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		// TODO: check content length, set max. size of body to read
-		buf, err := io.ReadAll(resp.Body)
+	defer func() {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 512*1024))
+		_ = resp.Body.Close()
+	}()
+
+	if logger.Enabled(ctx, slog.LevelDebug) {
+		respDump, err := httputil.DumpResponse(resp, true)
 		if err != nil {
-			logger.Error("rspamc reading http error body failed", "error", err)
+			logger.Warn("converting http response to printable representation failed",
+				"error", err,
+			)
 		}
-		logger.Debug("rspamc http response", "body", string(buf), "status", resp.Status)
+
+		logger.Debug("received http-response", "response", string(respDump))
+	}
+
+	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode >= 200 && resp.StatusCode <= 300 {
 			return nil
 		}
+
 		return fmt.Errorf("request failed with status: %s", resp.Status)
 	}
 
@@ -69,6 +81,7 @@ func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, 
 		if err != nil {
 			logger.Error("rspamc reading http error body failed", "error", err)
 		}
+
 		if len(buf) != 0 {
 			logger.Debug("response body is not processed", "body", string(buf))
 		}

@@ -1,9 +1,9 @@
 module github.com/fho/rspamd-iscan
 
-go 1.25.6
+go 1.26.4
 
 require (
-	github.com/emersion/go-imap/v2 v2.0.0-beta.7
+	github.com/emersion/go-imap/v2 v2.0.0-beta.8
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/spf13/pflag v1.0.10
 )
