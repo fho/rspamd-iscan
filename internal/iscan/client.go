@@ -236,31 +236,6 @@ func (c *Client) isSpam(r *rspamc.CheckResult) bool {
 	return r.Score >= c.spamTreshold
 }
 
-func rewriteSubject(mailFilepath string, env *imapclt.Envelope, result *rspamc.CheckResult, logger *slog.Logger) error {
-	if result.Subject == "" || result.Subject == env.Subject {
-		return nil
-	}
-
-	old := env.Subject
-	env.Subject = result.Subject
-
-	hdr := mail.Header{
-		Name: "Subject",
-		Body: result.Subject,
-	}
-
-	if err := mail.ReplaceHeader(mailFilepath, hdr); err != nil {
-		return fmt.Errorf("replacing subject header failed: %w", err)
-	}
-
-	logger.Debug("rspamd returned modified subject",
-		"old_subject", old,
-		"new_subject", env.Subject,
-	)
-
-	return nil
-}
-
 // replaceWithModifiedMails uploads mails to the spam or inbox mailbox, depending on their
 // spam score.
 // The original email is moved to the backup mailbox.
@@ -387,9 +362,19 @@ func (c *Client) downloadAndScan(msg *imapclt.Message) (*scannedMail, error) {
 		return nil, fmt.Errorf("closing file of downloaded mail failed: %w", err)
 	}
 
-	err = rewriteSubject(tmpFile.Name(), env, scanResult, logger)
-	if err != nil {
-		return nil, err
+	if scanResult.Subject != "" && scanResult.Subject != env.Subject {
+		err := mail.ReplaceHeader(
+			tmpFile.Name(),
+			mail.Header{Name: "Subject", Body: scanResult.Subject},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("rewriting subject failed: %w", err)
+		}
+
+		logger.Debug("rewrote mail subject",
+			"mail.subject.old", env.Subject,
+			"mail.subject.new", scanResult.Subject,
+		)
 	}
 
 	err = addScanResultHeaders(tmpFile.Name(), scanResult)
