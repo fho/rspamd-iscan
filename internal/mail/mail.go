@@ -168,17 +168,20 @@ func ReplaceHeader(path string, hdr Header) error {
 	if err != nil {
 		return err
 	}
+
 	emailFd, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer emailFd.Close()
+
 	err = replaceHeader(emailFd, tmpfileFd, hdr)
 	if err != nil {
 		_ = tmpfileFd.Close()
 		delErr := os.Remove(tmpfileFd.Name())
 		return errors.Join(err, delErr)
 	}
+
 	if err := tmpfileFd.Close(); err != nil {
 		delErr := os.Remove(tmpfileFd.Name())
 		return errors.Join(
@@ -186,6 +189,7 @@ func ReplaceHeader(path string, hdr Header) error {
 			delErr,
 		)
 	}
+
 	return os.Rename(tmpfileFd.Name(), path)
 }
 
@@ -212,9 +216,11 @@ func replaceHeader(in io.Reader, out io.Writer, hdr Header) error {
 			if !replaced {
 				return fmt.Errorf("header %q not found", hdr.Name)
 			}
+
 			if _, err := tmpfileBw.Write([]byte("\r\n")); err != nil {
 				return fmt.Errorf("writing failed: %w", err)
 			}
+
 			headerEnded = true
 			continue // Continue to copy body lines
 		}
@@ -235,9 +241,9 @@ func replaceHeader(in io.Reader, out io.Writer, hdr Header) error {
 		if skipContinuation {
 			if len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
 				continue // Skip physical continuation line
-			} else {
-				skipContinuation = false // Stop skipping; this line belongs to the next section/header
 			}
+
+			skipContinuation = false // Stop skipping; this line belongs to the next section/header
 		}
 
 		if !replaced && bytes.HasPrefix(bytes.ToUpper(line), bytes.ToUpper(prefix)) {
@@ -264,6 +270,7 @@ func replaceHeader(in io.Reader, out io.Writer, hdr Header) error {
 	if err := tmpfileBw.Flush(); err != nil {
 		return fmt.Errorf("flushing buffer failed: %w", err)
 	}
+
 	return nil
 }
 
