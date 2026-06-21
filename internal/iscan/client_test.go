@@ -146,7 +146,7 @@ func TestRun(t *testing.T) {
 		mailboxContainsMailCnt(t, clt2.clt, clt.spamMailbox, mail.SpamMailSubject),
 	)
 
-	assert.Equal(t, 1, 
+	assert.Equal(t, 1,
 		mailboxContainsMailCnt(t, clt2.clt, clt.inboxMailbox, mail.SuspiciousMailRewrittenSubject),
 	)
 

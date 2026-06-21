@@ -22,7 +22,7 @@ var SpamCheckResult = rspamc.CheckResult{
 }
 
 var SubjectRewriteResult = rspamc.CheckResult{
-	Score: 6,
+	Score:   6,
 	Subject: "[SPAM] Claim your FREE reward NOW!!!",
 }
 

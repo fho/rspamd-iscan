@@ -7,10 +7,10 @@ import (
 )
 
 const (
-	SpamMailSubject = "Test spam mail (GTUBE)"
-	SuspiciousMailSubject = "Claim your FREE reward NOW!!!"
+	SpamMailSubject                = "Test spam mail (GTUBE)"
+	SuspiciousMailSubject          = "Claim your FREE reward NOW!!!"
 	SuspiciousMailRewrittenSubject = "[SPAM] Claim your FREE reward NOW!!!"
-	HamMailSubject  = "An RFC 822 formatted message"
+	HamMailSubject                 = "An RFC 822 formatted message"
 )
 
 func findProjectRoot(t *testing.T) string {
