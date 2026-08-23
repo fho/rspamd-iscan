@@ -26,9 +26,9 @@ const (
 )
 
 type RspamdClient interface {
-	Check(context.Context, io.Reader, *rspamc.MailHeaders) (*rspamc.CheckResult, error)
-	Spam(context.Context, io.Reader, *rspamc.MailHeaders) error
-	Ham(context.Context, io.Reader, *rspamc.MailHeaders) error
+	Check(context.Context, io.Reader) (*rspamc.CheckResult, error)
+	Spam(context.Context, io.Reader) error
+	Ham(context.Context, io.Reader) error
 }
 
 type Client struct {
@@ -69,7 +69,7 @@ type scannedMail struct {
 	CheckResult *rspamc.CheckResult
 }
 
-type learnFn func(context.Context, io.Reader, *rspamc.MailHeaders) error
+type learnFn func(context.Context, io.Reader) error
 
 func NewClient(cfg *Config) (*Client, error) {
 	if err := cfg.validate(); err != nil {
@@ -123,7 +123,8 @@ func (c *Client) learn(srcMailbox, destMailbox string, markAsSeen bool, learnFn 
 	for msg, err := range c.clt.Messages(srcMailbox) {
 		if err != nil {
 			if errMalformed, ok := errors.AsType[*imapclt.ErrMalformedMsg](err); ok {
-				logger.Warn("skipping malformed message",
+				logger.Warn(
+					"skipping malformed message",
 					"mail.uid", errMalformed.UID,
 					"error", err,
 					"event", "imap.msg_malformed",
@@ -142,7 +143,6 @@ func (c *Client) learn(srcMailbox, destMailbox string, markAsSeen bool, learnFn 
 		err = learnFn(
 			context.TODO(),
 			msg.Message,
-			envelopeToRspamcHdrs(&msg.Envelope),
 		)
 		if err != nil {
 			logger.Warn("learning message failed", "error", err,
@@ -338,7 +338,8 @@ func (c *Client) downloadAndScan(msg *imapclt.Message) (*scannedMail, error) {
 
 	env := &msg.Envelope
 	logger := c.logger.With("mail.subject", env.Subject, "mail.uid", msg.UID)
-	logger.Debug("downloaded imap message",
+	logger.Debug(
+		"downloaded imap message",
 		"filepath", tmpFile.Name(),
 		"mail.envelope.message_id", env.MessageID,
 		"mail.envelope.from", env.From,
@@ -351,7 +352,7 @@ func (c *Client) downloadAndScan(msg *imapclt.Message) (*scannedMail, error) {
 		return nil, fmt.Errorf("setting %q file position to beginning failed: %w", tmpFile.Name(), err)
 	}
 	// TODO: retry Check if it failed with a temporary error
-	scanResult, err := c.rspamc.Check(context.Background(), tmpFile, envelopeToRspamcHdrs(env))
+	scanResult, err := c.rspamc.Check(context.Background(), tmpFile)
 	if err != nil {
 		errCleanupfn()
 		return nil, err
@@ -371,7 +372,8 @@ func (c *Client) downloadAndScan(msg *imapclt.Message) (*scannedMail, error) {
 			return nil, fmt.Errorf("rewriting subject failed: %w", err)
 		}
 
-		logger.Debug("rewrote mail subject",
+		logger.Debug(
+			"rewrote mail subject",
 			"mail.subject.old", env.Subject,
 			"mail.subject.new", scanResult.Subject,
 		)
@@ -382,7 +384,8 @@ func (c *Client) downloadAndScan(msg *imapclt.Message) (*scannedMail, error) {
 		return nil, fmt.Errorf("adding scan result headers to local mail copy failed: %w", err)
 	}
 
-	logger.Info("message scanned",
+	logger.Info(
+		"message scanned",
 		"scan.score", scanResult.Score, "scan.is_spam", c.isSpam(scanResult),
 	)
 
@@ -392,14 +395,6 @@ func (c *Client) downloadAndScan(msg *imapclt.Message) (*scannedMail, error) {
 		Envelope:    env,
 		CheckResult: scanResult,
 	}, nil
-}
-
-func envelopeToRspamcHdrs(env *imapclt.Envelope) *rspamc.MailHeaders {
-	return &rspamc.MailHeaders{
-		Subject:    env.Subject,
-		From:       env.From,
-		Recipients: env.Recipients,
-	}
 }
 
 func (c *Client) ProcessScanBox() error {
@@ -413,7 +408,8 @@ func (c *Client) ProcessScanBox() error {
 	for msg, err := range c.clt.Messages(c.scanMailbox) {
 		if err != nil {
 			if errMalformed, ok := errors.AsType[*imapclt.ErrMalformedMsg](err); ok {
-				logger.Warn("email is malformed, skipping scan",
+				logger.Warn(
+					"email is malformed, skipping scan",
 					"mail.uid", errMalformed.UID,
 					"error", err,
 					"event", "imap.msg_malformed",

@@ -59,14 +59,10 @@ func (c *Client) logResp(ctx context.Context, resp *http.Response) {
 	c.logger.Debug("received http-response", "response", string(respDump))
 }
 
-func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, msg io.Reader, result any) error {
+func (c *Client) sendRequest(ctx context.Context, url string, msg io.Reader, result any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, msg)
 	if err != nil {
 		return nil
-	}
-
-	if hdrs != nil {
-		req.Header = hdrs.Clone()
 	}
 
 	c.logReq(ctx, req)
@@ -110,25 +106,25 @@ func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, 
 	return nil
 }
 
-func (c *Client) Check(ctx context.Context, msg io.Reader, hdrs *MailHeaders) (*CheckResult, error) {
+func (c *Client) Check(ctx context.Context, msg io.Reader) (*CheckResult, error) {
 	var result CheckResult
 	// wrap in NopCloser to prevent that http.NewRequest closes the reader,
 	// it is not responsible for closing it, the caller is
-	err := c.sendRequest(ctx, c.checkURL, hdrs.asHeader(), io.NopCloser(msg), &result)
+	err := c.sendRequest(ctx, c.checkURL, io.NopCloser(msg), &result)
 	if err != nil {
 		return nil, err
 	}
 	return &result, err
 }
 
-func (c *Client) Ham(ctx context.Context, msg io.Reader, hdrs *MailHeaders) error {
+func (c *Client) Ham(ctx context.Context, msg io.Reader) error {
 	// resp code 208 == already learned, returns a json with an "error"
 	// field
-	return c.sendRequest(ctx, c.hamURL, hdrs.asHeader(), msg, nil)
+	return c.sendRequest(ctx, c.hamURL, msg, nil)
 }
 
-func (c *Client) Spam(ctx context.Context, msg io.Reader, hdrs *MailHeaders) error {
-	return c.sendRequest(ctx, c.spamURL, hdrs.asHeader(), msg, nil)
+func (c *Client) Spam(ctx context.Context, msg io.Reader) error {
+	return c.sendRequest(ctx, c.spamURL, msg, nil)
 }
 
 type CheckResult struct {

@@ -72,7 +72,7 @@ func newTestClient(t *testing.T, srv *imapserver.Server) *Client {
 func TestProcessScanBox_DownloadAndScanFails(t *testing.T) {
 	srv, clt := startServerClient(t)
 	clt.rspamc = &mock.Rspamc{
-		CheckFn: func(context.Context, io.Reader, *rspamc.MailHeaders) (*rspamc.CheckResult, error) {
+		CheckFn: func(context.Context, io.Reader) (*rspamc.CheckResult, error) {
 			return nil, errors.New("mock err")
 		},
 	}
@@ -126,27 +126,33 @@ func TestRun(t *testing.T) {
 	assert.Equal(t, true, mailboxIsEmpty(t, clt2.clt, srv.ScanMailbox))
 	assert.Equal(t, true, mailboxIsEmpty(t, clt2.clt, srv.UndetectedMailbox))
 
-	assert.Equal(t, 1,
+	assert.Equal(
+		t, 1,
 		mailboxContainsMailCnt(t, clt2.clt, clt.backupMailbox, mail.HamMailSubject),
 	)
 
-	assert.Equal(t, 1,
+	assert.Equal(
+		t, 1,
 		mailboxContainsMailCnt(t, clt2.clt, clt.backupMailbox, mail.SpamMailSubject),
 	)
 
-	assert.Equal(t, 1,
+	assert.Equal(
+		t, 1,
 		mailboxContainsMailCnt(t, clt2.clt, clt.backupMailbox, mail.SuspiciousMailSubject),
 	)
 
-	assert.Equal(t, 2,
+	assert.Equal(
+		t, 2,
 		mailboxContainsMailCnt(t, clt2.clt, clt.inboxMailbox, mail.HamMailSubject),
 	)
 
-	assert.Equal(t, 2,
+	assert.Equal(
+		t, 2,
 		mailboxContainsMailCnt(t, clt2.clt, clt.spamMailbox, mail.SpamMailSubject),
 	)
 
-	assert.Equal(t, 1,
+	assert.Equal(
+		t, 1,
 		mailboxContainsMailCnt(t, clt2.clt, clt.inboxMailbox, mail.SuspiciousMailRewrittenSubject),
 	)
 
