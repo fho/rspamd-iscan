@@ -28,8 +28,38 @@ func New(logger *slog.Logger, url, password string) *Client {
 	}
 }
 
+func (c *Client) logReq(ctx context.Context, req *http.Request) {
+	if !c.logger.Enabled(ctx, slog.LevelDebug) {
+		return
+	}
+
+	reqDump, err := httputil.DumpRequestOut(req, true)
+	if err != nil {
+		c.logger.Warn("converting http request to printable representation failed", "error", err)
+		return
+	}
+
+	c.logger.Debug("sending http-request (password hdr is omitted from msg)", "request", string(reqDump))
+}
+
+func (c *Client) logResp(ctx context.Context, resp *http.Response) {
+	if !c.logger.Enabled(ctx, slog.LevelDebug) {
+		return
+	}
+
+	respDump, err := httputil.DumpResponse(resp, true)
+	if err != nil {
+		c.logger.Warn(
+			"converting http response to printable representation failed",
+			"error", err,
+		)
+		return
+	}
+
+	c.logger.Debug("received http-response", "response", string(respDump))
+}
+
 func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, msg io.Reader, result any) error {
-	logger := c.logger.With("url", url)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, msg)
 	if err != nil {
 		return nil
@@ -38,6 +68,9 @@ func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, 
 	if hdrs != nil {
 		req.Header = hdrs.Clone()
 	}
+
+	c.logReq(ctx, req)
+
 	req.Header.Add("password", c.password)
 
 	// TODO: use custom client with configured timeouts
@@ -51,16 +84,7 @@ func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, 
 		_ = resp.Body.Close()
 	}()
 
-	if logger.Enabled(ctx, slog.LevelDebug) {
-		respDump, err := httputil.DumpResponse(resp, true)
-		if err != nil {
-			logger.Warn("converting http response to printable representation failed",
-				"error", err,
-			)
-		}
-
-		logger.Debug("received http-response", "response", string(respDump))
-	}
+	c.logResp(ctx, resp)
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode >= 200 && resp.StatusCode <= 300 {
@@ -76,18 +100,7 @@ func (c *Client) sendRequest(ctx context.Context, url string, hdrs http.Header, 
 		return fmt.Errorf("got response with content-type: %q, expecting: %q", ctype, contentTypeJSON)
 	}
 
-	if result == nil {
-		buf, err := io.ReadAll(resp.Body)
-		if err != nil {
-			logger.Error("rspamc reading http error body failed", "error", err)
-		}
-
-		if len(buf) != 0 {
-			logger.Debug("response body is not processed", "body", string(buf))
-		}
-
-		return nil
-	}
+	c.logResp(ctx, resp)
 
 	err = json.NewDecoder(resp.Body).Decode(result)
 	if err != nil {
