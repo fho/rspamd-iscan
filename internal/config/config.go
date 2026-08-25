@@ -27,6 +27,7 @@ type Config struct {
 	LogIMAPData             bool
 	MarkLearnedAsSpamAsRead bool
 	LogLevel                string
+	SocksProxyAddr          string
 }
 
 // New returns an new config initialized with default values
@@ -64,6 +65,8 @@ func (c *Config) String() string {
 	} else {
 		printKv("IMAP Password", hiddenPasswd)
 	}
+
+	printKv("SOCKS Proxy Address", c.SocksProxyAddr)
 
 	printKv("Spam Treshold", c.SpamThreshold)
 	printKv("Scan Mailbox", c.ScanMailbox)

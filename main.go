@@ -108,12 +108,13 @@ func newIMAPClient(cfg *config.Config, flags *flags, logger *slog.Logger) (iscan
 	var clt iscan.IMAPClient
 
 	imapCfg := imapclt.Config{
-		Address:       cfg.ImapAddr,
-		User:          cfg.ImapUser,
-		Password:      cfg.ImapPassword,
-		AllowInsecure: false,
-		Logger:        logger,
-		LogIMAPData:   cfg.LogIMAPData,
+		Address:        cfg.ImapAddr,
+		User:           cfg.ImapUser,
+		Password:       cfg.ImapPassword,
+		AllowInsecure:  false,
+		Logger:         logger,
+		LogIMAPData:    cfg.LogIMAPData,
+		SocksProxyAddr: cfg.SocksProxyAddr,
 	}
 
 	if flags.dryRun {

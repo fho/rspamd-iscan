@@ -100,6 +100,8 @@ LogLevel                = "info"
 LogIMAPData             = false
 # Mark mails in UndetectedMailbox as read when moving them to SpamMailbox.
 MarkLearnedAsSpamAsRead = true
+# Use a SOCKS5 proxy to reach imap server
+SocksProxyAddr          = "mysocks5proxy:port"
 ```
 
 ### Credentials Directory

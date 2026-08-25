@@ -1,6 +1,7 @@
 package imapclt
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"golang.org/x/net/proxy"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
@@ -27,9 +30,10 @@ type Client struct {
 	password      string
 	allowInsecure bool
 
-	clt         *imapclient.Client
-	logger      *slog.Logger
-	logIMAPData bool
+	clt               *imapclient.Client
+	logger            *slog.Logger
+	logIMAPData       bool
+	socksProxyAddress string
 
 	newMessagesCh chan<- *EventNewMessages
 	mu            sync.Mutex
@@ -49,6 +53,8 @@ type Config struct {
 	// LogIMAPData enables logging raw IMAP protocol data with debug
 	// priority, it can contain sensitive information
 	LogIMAPData bool
+	// SocksProxyAddr is the SOCKS5 proxy address.
+	SocksProxyAddr string
 }
 
 type EventNewMessages struct {
@@ -59,29 +65,43 @@ type EventNewMessages struct {
 // [*Client.Connect] must be called before any other methods.
 func NewClient(cfg *Config) *Client {
 	return &Client{
-		address:       cfg.Address,
-		user:          cfg.User,
-		password:      cfg.Password,
-		allowInsecure: cfg.AllowInsecure,
-		logger:        log.EnsureLoggerInstance(cfg.Logger),
-		logIMAPData:   cfg.LogIMAPData,
+		address:           cfg.Address,
+		user:              cfg.User,
+		password:          cfg.Password,
+		allowInsecure:     cfg.AllowInsecure,
+		logger:            log.EnsureLoggerInstance(cfg.Logger),
+		logIMAPData:       cfg.LogIMAPData,
+		socksProxyAddress: cfg.SocksProxyAddr,
 	}
 }
 
 // Connect establishes a connection the IMAP-Server.
 func (c *Client) Connect() error {
 	var debugWriter io.Writer
+	var clt *imapclient.Client
+	var err error
+
 	if c.logIMAPData {
 		debugWriter = NewDebugWriter(c.logger)
 	}
 
-	clt, err := c.dial(c.address, c.allowInsecure, &imapclient.Options{
-		UnilateralDataHandler: &imapclient.UnilateralDataHandler{
-			Mailbox: c.mailboxUpdateHandler,
-		},
-		Dialer:      &net.Dialer{Timeout: dialTimeout},
-		DebugWriter: debugWriter,
-	})
+	if c.socksProxyAddress != "" {
+		clt, err = c.dialWithSocksProxy(c.address, c.allowInsecure, &imapclient.Options{
+			UnilateralDataHandler: &imapclient.UnilateralDataHandler{
+				Mailbox: c.mailboxUpdateHandler,
+			},
+			DebugWriter: debugWriter,
+		})
+	} else {
+		clt, err = c.dial(c.address, c.allowInsecure, &imapclient.Options{
+			UnilateralDataHandler: &imapclient.UnilateralDataHandler{
+				Mailbox: c.mailboxUpdateHandler,
+			},
+			Dialer:      &net.Dialer{Timeout: dialTimeout},
+			DebugWriter: debugWriter,
+		})
+
+	}
 	if err != nil {
 		return fmt.Errorf("establishing imap server connection failed: %w", err)
 	}
@@ -93,7 +113,6 @@ func (c *Client) Connect() error {
 
 	c.logger.Info("connection established, authentication succeeded",
 		"event", "imap.connection_established")
-
 	return nil
 }
 
@@ -119,6 +138,53 @@ func (c *Client) dial(address string, allowInsecure bool, opts *imapclient.Optio
 	if err != nil && allowInsecure && isStartTLSNotSupportedErr(err) {
 		logger.Warn("establishing secure connection failed, connecting without encryption", "tlsmode", "none", "error", err)
 		return imapclient.DialInsecure(address, opts)
+	}
+
+	return clt, err
+}
+
+func (c *Client) dialWithSocksProxy(address string, allowInsecure bool, opts *imapclient.Options) (*imapclient.Client, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+
+	logger := c.logger.With("server", address).With("timeout", dialTimeout)
+
+	logger.Debug("connecting to SOCKS proxy server", "address", c.socksProxyAddress)
+	//proxyDialer, err := proxy.SOCKS5("tcp", c.socksProxyAddress, nil, &net.Dialer{Timeout: 5 * time.Second})
+	proxyDialer, err := proxy.SOCKS5("tcp", c.socksProxyAddress, nil, proxy.Direct)
+	if err != nil {
+		panic(err)
+	}
+
+	conn, err := proxyDialer.Dial("tcp", c.address) // connect
+	if err != nil {
+		panic(err)
+	}
+
+	if port == "993" || port == "imaps" {
+		logger.Debug("connecting to imap server", "tlsmode", "implicit")
+		conn = tls.Client(conn, nil)           // use tls
+		return imapclient.New(conn, opts), nil // create imap client
+	}
+
+	logger.Debug("connecting to imap server", "tlsmode", "explicit")
+	tlsConfig := new(tls.Config)
+	if tlsConfig.ServerName == "" {
+		tlsConfig.ServerName = host
+	}
+	if opts == nil {
+		opts = &imapclient.Options{}
+	}
+
+	newOptions := *opts
+	newOptions.TLSConfig = tlsConfig
+	clt, err := imapclient.NewStartTLS(conn, &newOptions)
+
+	if err != nil && allowInsecure && isStartTLSNotSupportedErr(err) {
+		logger.Warn("establishing secure connection failed, connecting without encryption", "tlsmode", "none", "error", err)
+		return imapclient.New(conn, opts), nil // create imap client
 	}
 
 	return clt, err
